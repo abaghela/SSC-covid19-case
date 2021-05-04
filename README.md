@@ -28,6 +28,7 @@ The team is comprised of Arjun Baghela, Travis Blimkie, and Hossam Mohammaed.
 	- [ShinySIR](https://cran.r-project.org/web/packages/shinySIR/vignettes/Vignette.html)
 	- [The SIR model in R](https://archives.aidanfindlater.com/blog/2010/04/20/the-basic-sir-model-in-r/)
 - [Modeling COVID-19 (in Python)](https://python.quantecon.org/sir_model.html)
+- BC CDC COVID-19 [data page](http://www.bccdc.ca/health-info/diseases-conditions/covid-19/data)
 
 ## Papers
 

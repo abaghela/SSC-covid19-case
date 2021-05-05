@@ -13,7 +13,7 @@ vaccines, stay at home orders) during the COVID-19 pandemic in British Columbia,
 Canada.
 
 ## Team
-The team is comprised of Arjun Baghela, Travis Blimkie, and Hossam Mohammaed. 
+The team is comprised of Arjun Baghela, Travis Blimkie, and Hossameldin Mohammed. 
 
 ## Important dates
 

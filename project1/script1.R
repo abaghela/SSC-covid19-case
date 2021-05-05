@@ -1,5 +1,4 @@
 
-
 # Load packages -----------------------------------------------------------
 
 library(EpiDynamics)
@@ -44,29 +43,31 @@ results_v1 %>%
 
 # Using EpiDynamics -------------------------------------------------------
 
-ed_parameters <- c(
-  mu = 1 / 70, # per capita death rate and pop level birth rate (we assume they're the same)
-  beta = 520 / 200, # transmission rate
-  sigma = 1 / 14, # movement form exposed to infectious
-  gamma = 1 / 9 # recovery rate
-)
-
-ed_initials <-
-  c(
-    S = 1 - 1e-6, # Susceptible
-    E = 1e-04, # Exposed
-    I = 1e-6, # Infected
-    R = 1 - 0.1 - 1e-4 - 1e-4 # Recovered
+seir_and_plot <- function(initials, paramaters, time) {
+  results_ls <- EpiDynamics::SEIR(
+    pars = paramaters,
+    init = initials,
+    time = time
   )
+  results_ls$results %>%
+    pivot_longer(., S:R, names_to = "pop", values_to = "num") %>%
+      ggplot(., aes(time, num, group = pop, colour = pop)) +
+      geom_line(size = 1.2) +
+      theme_classic(base_size = 16)
+}
 
-ed_seir <- SEIR(
-  pars = ed_parameters,
-  init = ed_initials,
-  time = 0:70
+seir_and_plot(
+  initials = c(
+    S = 0.1,
+    E = 1e-4,
+    I = 1e-4,
+    R = 1 - 0.1 - 1e-4 - 1e-4
+  ),
+  paramaters = c(
+    mu    = 1 / (70 * 365), # per capita death rate and pop level birth rate (we assume they're the same)
+    beta  = 520 / 365, # transmission rate
+    sigma = 1 / 14, # movement form exposed to infectious
+    gamma = 1 / 7 # recovery rate
+  ),
+  time = 0:365
 )
-
-ed_seir$results %>%
-  pivot_longer(., S:R, names_to = "pop", values_to = "num") %>%
-  ggplot(., aes(time, num, group = pop, colour = pop)) +
-    geom_line(size = 1.2) +
-    theme_classic(base_size = 16)

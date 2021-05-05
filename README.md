@@ -40,8 +40,11 @@ The team is comprised of Arjun Baghela, Travis Blimkie, and Hossam Mohammaed.
 
 We need 1-3 research questions to focus our poster on. Some ideas include:
 
-- What is the impact of lockdowns of varrying length on the spread of COVID-19 in British Columbia?
+- What is the impact of lockdowns of varying length on the spread of COVID-19 in
+British Columbia?
 - How does the mass administration of COVID-19 vaccines affect case numbers?
+- How does the emergence of variants of COVID-19, with higher rates of
+transmission and infection, impact mortality in British Columbia?
 
 ## Poster details
 

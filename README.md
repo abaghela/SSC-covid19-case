@@ -30,6 +30,15 @@ The team is comprised of Arjun Baghela, Travis Blimkie, and Hossameldin Mohammed
 - [Modeling COVID-19 (in Python)](https://python.quantecon.org/sir_model.html)
 - BC CDC COVID-19 [data page](http://www.bccdc.ca/health-info/diseases-conditions/covid-19/data)
 
+## Links from Daniel
+
+- [covidseir](https://seananderson.github.io/covidseir/)
+- [Covid with Bayes](https://github.com/dsheldon/covid)
+- [BC vaccines starting point](https://doodles.mountainmath.ca/blog/2021/03/10/vaxx-vs-vocs/)
+- [CanCovidData](https://github.com/mountainMath/CanCovidData)
+- [OpenCOVID](https://opencovid.ca/)
+- [BC Covid Reports](https://github.com/mountainMath/BCCovidSnippets)
+
 ## Papers
 
 - SEIR modeling of the COVID-19 and its dynamics. [He et al.](https://link.springer.com/article/10.1007/s11071-020-05743-y)

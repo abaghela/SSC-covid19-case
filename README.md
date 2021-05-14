@@ -32,7 +32,7 @@ The team is comprised of Arjun Baghela, Travis Blimkie, and Hossameldin Mohammed
 
 ## Links from Daniel
 
-- [covidseir](https://seananderson.github.io/covidseir/)
+- [covidseir](https://seananderson.github.io/covidseir/) ([github](https://github.com/seananderson/covidseir))
 - [Covid with Bayes](https://github.com/dsheldon/covid)
 - [BC vaccines starting point](https://doodles.mountainmath.ca/blog/2021/03/10/vaxx-vs-vocs/)
 - [CanCovidData](https://github.com/mountainMath/CanCovidData)

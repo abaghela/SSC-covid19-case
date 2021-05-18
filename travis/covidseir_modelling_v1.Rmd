@@ -1,0 +1,313 @@
+---
+title: "Using covidseir to model COVID-19 in B.C."
+author: "Travis Blimkie, Arjun Baghela & Hossameldin Mohammed"
+date: "`r format(Sys.time(), '%B %d, %Y')`"
+output:
+  html_document:
+    theme: readable
+    highlight: kate
+    fig_caption: yes
+    toc: yes
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(
+  echo    = TRUE, 
+  message = FALSE, 
+  warning = FALSE, 
+  comment = "",
+  fig.width  = 9,
+  fig.height = 6
+)
+```
+
+
+## Load packages
+```{r libraries}
+suppressPackageStartupMessages({
+  library(covidseir)
+  library(lubridate)
+  library(tidyverse)
+  # future::plan(future::multisession)
+})
+```
+
+<br>
+
+## Load data
+We're using the BC COVID-19 case data from the BC CDC, downloaded on May 17th,
+2021 from this
+[link](http://www.bccdc.ca/health-info/diseases-conditions/covid-19/data).
+
+```{r}
+bc_data <-
+  read_csv("../bc_data/BCCDC_COVID19_Dashboard_Case_Details.csv") %>%
+  janitor::clean_names()
+
+bc_data_daily_cases <- bc_data %>%
+  group_by(reported_date) %>%
+  summarise(daily_cases = n())
+```
+
+<br>
+
+## Plot trends in case data
+### New cases per day, March 2020 - May 2021
+```{r}
+ggplot(bc_data_daily_cases, aes(reported_date, daily_cases)) +
+  geom_col() +
+  theme_bw(base_size = 16) +
+  scale_y_continuous(expand = c(0, 0)) +
+  labs(
+    x = "Date",
+    y = "Daily Case Count"
+  )
+```
+
+<br>
+
+### Daily cases, March 2020 - May 2021, coloured by region
+```{r}
+bc_data %>% 
+  group_by(reported_date, ha) %>% 
+  summarise(daily_cases = n()) %>% 
+  ggplot(., aes(reported_date, daily_cases, fill = ha)) +
+  geom_col(alpha = 0.5) +
+  theme_bw(base_size = 16) +
+  scale_y_continuous(expand = c(0, 0)) +
+  labs(
+    x = "Date",
+    y = "Daily Case Count",
+    fill = "Region"
+  )
+```
+
+<br>
+
+### New cases per day, March 2020 - December 2020
+```{r}
+bc_data_daily_cases %>%
+  filter(reported_date <= ymd("20201231")) %>%
+  ggplot(., aes(reported_date, daily_cases)) +
+  geom_point(pch = 21, fill = "dodgerblue", colour = "black") +
+  geom_line() +
+  theme_bw(base_size = 16) +
+  scale_y_continuous(expand = c(0, 20)) +
+  labs(
+    x = "Date",
+    y = "Daily Case Count"
+  )
+```
+
+<br>
+
+### Daily cases March 2020 - December 2020 with highlighted dates
+```{r plot_restrictions_labelled}
+major_restrictions <- c(
+  "2020-11-07" = "No private gatherings",
+  "2020-11-19" = "Masks in stores. \nTravel discouraged."
+  # "2021-03-11" = "Outdoor gathering \nof 10 people allowed",
+  # "2021-03-29" = "\n\n\nNo indoor dining\nNo indoor group activity\nMasks grades 4-12"
+)
+
+major_restrictions_tbl <- tibble(
+  date = names(major_restrictions),
+  text = major_restrictions,
+  yval = c(250, 500)
+)
+
+bc_data_daily_cases %>%
+  filter(between(reported_date, ymd("20200901"), ymd("20201231"))) %>%
+  ggplot(., aes(reported_date, daily_cases)) +
+  geom_point(pch = 21, fill = "dodgerblue", colour = "black") +
+  geom_line() +
+  geom_vline(
+    xintercept = ymd(names(major_restrictions)),
+    linetype = "dashed",
+    colour = "red",
+    size = 1
+  ) +
+  ggrepel::geom_label_repel(
+    data = major_restrictions_tbl, 
+    aes(x = ymd(date), label = text, y = yval)
+  ) +
+  theme_bw(base_size = 16) +
+  scale_y_continuous(expand = c(0, 20)) +
+  labs(
+    x = "Date",
+    y = "Daily Case Count"
+  )
+```
+
+<br>
+
+## The current, best model
+Our current model spans from March 2020 to March 2021. It seems to perform 
+reasonably well the in beginning, but the residuals quickly become quite large
+once cases numbers start to rise and then peak in late 2020.
+```{r current_model}
+model_input_v1 <- bc_data_daily_cases %>%
+  filter(reported_date < ymd("20210315")) %>% 
+  mutate(day = 1:nrow(.))
+
+samp_frac_v1 <- c(
+  rep(0.14, 13),
+  rep(0.21, 38),
+  rep(0.37, 125),
+  rep(0.45, nrow(model_input_v1) - (13 + 38 + 125))
+)
+
+model_input_v1 <- model_input_v1 %>%
+  mutate(
+    f_seg = case_when(
+      reported_date == ymd("2020-01-29") ~ 0,
+      reported_date < ymd("20200501") ~ 1,
+      between(reported_date, ymd("2020-05-01"), ymd("2020-06-01")) ~ 2,
+      between(reported_date, ymd("2020-06-02"), ymd("2020-11-15")) ~ 3,
+      between(reported_date, ymd("2020-11-16"), ymd("2021-01-01")) ~ 4,
+      between(reported_date, ymd("2021-01-02"), ymd("2021-05-05")) ~ 5,
+      TRUE ~ 9
+    )
+  )
+
+seir_real_dat_v1 <- fit_seir(
+  daily_cases         = model_input_v1$daily_cases,
+  f_seg               = model_input_v1$f_seg,
+  samp_frac_fixed     = samp_frac_v1,
+  days_back           = 60,
+  i0_prior            = c(log(8), 1),
+  e_prior             = c(0.8, 0.05),
+  start_decline_prior = c(log(15), 0.1),
+  end_decline_prior   = c(log(22), 0.1),
+  f_prior             = rbind(c(0.4, 0.2), c(0.5, 0.2), c(0.6, 0.2), c(0.7, 0.2), c(0.7, 0.2)),
+  R0_prior            = c(log(2.95), 0.07),
+  N_pop               = 5.1e6,
+  fit_type            = "optimizing",
+  iter                = 50
+)
+
+project_real_dat_v1 <- project_seir(seir_real_dat_v1, iter = 1:50)
+
+project_real_tidy_v1 <- 
+  tidy_seir(project_real_dat_v1, resample_y_rep = 20) %>%
+  left_join(., model_input_v1, by = "day")
+
+plot_projection(
+  pred_dat     = project_real_tidy_v1,
+  obs_dat      = model_input_v1,
+  value_column = "daily_cases",
+  date_column  = "reported_date",
+) +
+  theme_bw(base_size = 16) +
+  labs(x = "Date")
+
+plot_residuals(
+  pred_dat      = project_real_tidy_v1,
+  obs_dat       = model_input_v1,
+  obj           = seir_real_dat_v1,
+  value_column  = "daily_cases",
+  date_column   = "day",
+  type          = c("raw", "quantile"),
+  date_function = lubridate::ymd
+) +
+  theme_bw(base_size = 16) +
+  labs(x = "Day")
+```
+
+<br>
+
+## Research question
+In November 2020, the public health authority introduced new measures in an
+attempt to slow the spread of COVID-19 in the province. These included a
+mandatory mask policy for all indoor public spaces, travel restrictions and the
+banning of private gatherings with individuals outside the household. Can we
+develop a model based on BC's COVID data to project possible outcomes had these
+measures been implemented earlier or later?
+
+<br>
+
+## Developing a new model
+Since at moment I don't want to try and figure out how to ignore the social
+distancing ramp (to allow us to start at a later date, e.g. September), let's 
+just filter the data to the end of December 2020.
+```{r}
+model_input_v2 <- bc_data_daily_cases %>%
+  filter(reported_date <= ymd("20201231")) %>% 
+  mutate(day = 1:nrow(.))
+
+samp_frac_v2 <- c(
+  rep(0.14, 13),
+  rep(0.21, 38),
+  rep(0.37, 125),
+  rep(0.45, nrow(model_input_v2) - (13 + 38 + 125))
+)
+
+model_input_v2 <- model_input_v2 %>%
+  mutate(
+    f_seg = case_when(
+      reported_date == ymd("2020-01-29") ~ 0,
+      reported_date < ymd("20200501") ~ 1,
+      between(reported_date, ymd("2020-05-01"), ymd("2020-06-01")) ~ 2,
+      between(reported_date, ymd("2020-06-02"), ymd("2020-11-15")) ~ 3,
+      between(reported_date, ymd("2020-11-16"), ymd("2020-12-31")) ~ 4,
+      TRUE ~ 9
+    )
+  )
+
+seir_real_dat_v2 <- fit_seir(
+  daily_cases         = model_input_v2$daily_cases,
+  f_seg               = model_input_v2$f_seg,
+  samp_frac_fixed     = samp_frac_v2,
+  days_back           = 60,
+  i0_prior            = c(log(8), 1),
+  e_prior             = c(0.8, 0.05),
+  start_decline_prior = c(log(15), 0.1),
+  end_decline_prior   = c(log(22), 0.1),
+  f_prior             = rbind(c(0.4, 0.2), c(0.5, 0.2), c(0.6, 0.2), c(0.7, 0.2)),
+  R0_prior            = c(log(2.6), 0.2),
+  N_pop               = 5.1e6,
+  fit_type            = "optimizing",
+  iter                = 50
+)
+
+project_real_dat_v2 <- project_seir(seir_real_dat_v2, iter = 1:50)
+
+project_real_tidy_v2 <- 
+  tidy_seir(project_real_dat_v2, resample_y_rep = 20) %>%
+  left_join(., model_input_v2, by = "day")
+
+plot_projection(
+  pred_dat     = project_real_tidy_v2,
+  obs_dat      = model_input_v2,
+  value_column = "daily_cases",
+  date_column  = "reported_date",
+) +
+  theme_bw(base_size = 16) +
+  labs(x = "Date")
+
+plot_residuals(
+  pred_dat      = project_real_tidy_v2,
+  obs_dat       = model_input_v2,
+  obj           = seir_real_dat_v2,
+  value_column  = "daily_cases",
+  date_column   = "day",
+  type          = c("raw", "quantile"),
+  date_function = lubridate::ymd
+) +
+  theme_bw(base_size = 16) +
+  labs(x = "Day")
+```
+
+<br>
+
+So we still have a problem with the residuals going crazy along with our spike
+in cases over the fall (BC's second wave)...
+
+<br>
+
+***
+
+```{r session_info}
+sessionInfo()
+```
+

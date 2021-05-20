@@ -39,7 +39,7 @@ We're using the BC COVID-19 case data from the BC CDC, downloaded on May 17th,
 2021 from this
 [link](http://www.bccdc.ca/health-info/diseases-conditions/covid-19/data).
 
-```{r}
+```{r load_data}
 bc_data <-
   read_csv("../bc_data/BCCDC_COVID19_Dashboard_Case_Details.csv") %>%
   janitor::clean_names()
@@ -52,8 +52,8 @@ bc_data_daily_cases <- bc_data %>%
 <br>
 
 ## Plot trends in case data
-### New cases per day, March 2020 - May 2021
-```{r}
+### Daily Cases, January 29 2020 - May 17 2021
+```{r daily_cases_all}
 ggplot(bc_data_daily_cases, aes(reported_date, daily_cases)) +
   geom_col() +
   theme_bw(base_size = 16) +
@@ -66,8 +66,8 @@ ggplot(bc_data_daily_cases, aes(reported_date, daily_cases)) +
 
 <br>
 
-### Daily cases, March 2020 - May 2021, coloured by region
-```{r}
+### Daily cases, January 29 2020 - May 17 2021, coloured by region
+```{r daily_cases_region}
 bc_data %>% 
   group_by(reported_date, ha) %>% 
   summarise(daily_cases = n()) %>% 
@@ -84,8 +84,8 @@ bc_data %>%
 
 <br>
 
-### New cases per day, March 2020 - December 2020
-```{r}
+### Daily cases, January 29 - December 31 2020
+```{r daily_cases_fall}
 bc_data_daily_cases %>%
   filter(reported_date <= ymd("20201231")) %>%
   ggplot(., aes(reported_date, daily_cases)) +
@@ -101,11 +101,11 @@ bc_data_daily_cases %>%
 
 <br>
 
-### Daily cases March 2020 - December 2020 with highlighted dates
+### Daily cases, September 1 - December 31 2020, with highlighted dates
 ```{r plot_restrictions_labelled}
 major_restrictions <- c(
-  "2020-11-07" = "No private gatherings",
-  "2020-11-19" = "Masks in stores. \nTravel discouraged."
+  "2020-11-07" = "No private gatherings.",
+  "2020-11-19" = "Masks mandated in stores.\n Non-essential travel\n discouraged."
   # "2021-03-11" = "Outdoor gathering \nof 10 people allowed",
   # "2021-03-29" = "\n\n\nNo indoor dining\nNo indoor group activity\nMasks grades 4-12"
 )
@@ -113,7 +113,7 @@ major_restrictions <- c(
 major_restrictions_tbl <- tibble(
   date = names(major_restrictions),
   text = major_restrictions,
-  yval = c(250, 500)
+  yval = c(150, 350)
 )
 
 bc_data_daily_cases %>%
@@ -121,33 +121,147 @@ bc_data_daily_cases %>%
   ggplot(., aes(reported_date, daily_cases)) +
   geom_point(pch = 21, fill = "dodgerblue", colour = "black") +
   geom_line() +
-  geom_vline(
-    xintercept = ymd(names(major_restrictions)),
-    linetype = "dashed",
-    colour = "red",
-    size = 1
-  ) +
-  ggrepel::geom_label_repel(
-    data = major_restrictions_tbl, 
-    aes(x = ymd(date), label = text, y = yval)
-  ) +
   theme_bw(base_size = 16) +
   scale_y_continuous(expand = c(0, 20)) +
   labs(
     x = "Date",
     y = "Daily Case Count"
+  ) +
+  annotate(
+    geom = "vline",
+    x = ymd(major_restrictions_tbl$date),
+    xintercept = ymd(major_restrictions_tbl$date),
+    linetype = "dashed",
+    colour = "red",
+    size = 1
+  ) +
+  annotate(
+    geom = "label",
+    x = ymd(major_restrictions_tbl$date),
+    y = major_restrictions_tbl$yval,
+    label = major_restrictions_tbl$text,
+    vjust = 1,
+    hjust = -0.05
   )
 ```
 
 <br>
 
-## The current, best model
+## The starting-point model
 Our current model spans from March 2020 to March 2021. It seems to perform 
 reasonably well the in beginning, but the residuals quickly become quite large
 once cases numbers start to rise and then peak in late 2020.
 ```{r current_model}
-model_input_v1 <- bc_data_daily_cases %>%
+model_input_v0 <- bc_data_daily_cases %>%
   filter(reported_date < ymd("20210315")) %>% 
+  mutate(day = 1:nrow(.))
+
+samp_frac_v0 <- c(
+  rep(0.14, 13),
+  rep(0.21, 38),
+  rep(0.37, 125),
+  rep(0.45, nrow(model_input_v0) - (13 + 38 + 125))
+)
+
+model_input_v0 <- model_input_v0 %>%
+  mutate(
+    f_seg = case_when(
+      reported_date == ymd("2020-01-29") ~ 0,
+      reported_date < ymd("20200501") ~ 1,
+      between(reported_date, ymd("2020-05-01"), ymd("2020-06-01")) ~ 2,
+      between(reported_date, ymd("2020-06-02"), ymd("2020-11-15")) ~ 3,
+      between(reported_date, ymd("2020-11-16"), ymd("2021-01-01")) ~ 4,
+      between(reported_date, ymd("2021-01-02"), ymd("2021-05-05")) ~ 5,
+      TRUE ~ 9
+    )
+  )
+
+seir_real_dat_v0 <- fit_seir(
+  daily_cases         = model_input_v0$daily_cases,
+  f_seg               = model_input_v0$f_seg,
+  samp_frac_fixed     = samp_frac_v0,
+  days_back           = 60,
+  i0_prior            = c(log(8), 1),
+  e_prior             = c(0.8, 0.05),
+  start_decline_prior = c(log(15), 0.1),
+  end_decline_prior   = c(log(22), 0.1),
+  f_prior             = rbind(c(0.4, 0.2), c(0.5, 0.2), c(0.6, 0.2), c(0.7, 0.2), c(0.7, 0.2)),
+  R0_prior            = c(log(2.95), 0.07),
+  N_pop               = 5.1e6,
+  fit_type            = "optimizing",
+  iter                = 50
+)
+
+project_real_dat_v0 <- project_seir(seir_real_dat_v0, iter = 1:50)
+
+project_real_tidy_v0 <- 
+  tidy_seir(project_real_dat_v0, resample_y_rep = 20) %>%
+  left_join(., model_input_v0, by = "day")
+
+plot_projection(
+  pred_dat     = project_real_tidy_v0,
+  obs_dat      = model_input_v0,
+  value_column = "daily_cases",
+  date_column  = "reported_date",
+) +
+  theme_bw(base_size = 16) +
+  labs(x = "Date")
+
+plot_residuals(
+  pred_dat      = project_real_tidy_v0,
+  obs_dat       = model_input_v0,
+  obj           = seir_real_dat_v0,
+  value_column  = "daily_cases",
+  date_column   = "day",
+  type          = c("raw", "quantile"),
+  date_function = lubridate::ymd
+) +
+  theme_bw(base_size = 16) +
+  labs(x = "Day")
+```
+
+<br>
+
+## Research question
+In November 2020, the public health authority introduced new measures in an
+attempt to slow the spread of COVID-19 in the province. These included a
+mandatory mask policy for all indoor public spaces, travel restrictions and the
+banning of private gatherings with individuals outside the household. Can we
+develop a model based on BC's COVID data to project possible outcomes had these
+measures been implemented earlier or later?
+
+<br>
+
+## Developing a new model
+
+### Parameters of concern
+Parameters we need to figure out, in approximate order of importance/priority:
+
+- R0 - I think this should be estimated from our case data for the time range
+we're interested in, but I'm not sure how to do this...
+- Sampling fraction - the `covidseir` package covered the first 176 days of the
+model, and I covered the remaining days with a value of 0.45, thinking testing
+coverage probably increased somewhat...but this number needs to be (ideally)
+based on some sort of data or public health record
+- Distancing dates - these "breakpoints" represent changes in social distancing
+behaviour, and their number and placement in the time line need to be adjusted
+- Days back - needs to be "...sufficiently large tha the results don't change,"
+from the `fit_seir` help page. I don't know what the default is, but I set it to
+60 in the above models.
+- The social distancing ramp (start- and end-decline prior) could also be
+tweaked, though I used the values from the vignette which is based on BC data;
+It is from a shorter time range than what we're looking at, though it should
+still be applicable since we're just extending the end date of the model
+
+### Attempt 1
+Since at moment I don't want to try and figure out how to ignore the social
+distancing ramp (to allow us to start at a later date, e.g. September), let's 
+just filter the data to the end of December 2020. And I also reverted to using 
+the vignette's estimate of R0 in B.C., since at the moment I can't justify 
+using a different value.
+```{r attempt1}
+model_input_v1 <- bc_data_daily_cases %>%
+  filter(reported_date <= ymd("20201231")) %>% 
   mutate(day = 1:nrow(.))
 
 samp_frac_v1 <- c(
@@ -164,8 +278,7 @@ model_input_v1 <- model_input_v1 %>%
       reported_date < ymd("20200501") ~ 1,
       between(reported_date, ymd("2020-05-01"), ymd("2020-06-01")) ~ 2,
       between(reported_date, ymd("2020-06-02"), ymd("2020-11-15")) ~ 3,
-      between(reported_date, ymd("2020-11-16"), ymd("2021-01-01")) ~ 4,
-      between(reported_date, ymd("2021-01-02"), ymd("2021-05-05")) ~ 5,
+      between(reported_date, ymd("2020-11-16"), ymd("2020-12-31")) ~ 4,
       TRUE ~ 9
     )
   )
@@ -179,8 +292,8 @@ seir_real_dat_v1 <- fit_seir(
   e_prior             = c(0.8, 0.05),
   start_decline_prior = c(log(15), 0.1),
   end_decline_prior   = c(log(22), 0.1),
-  f_prior             = rbind(c(0.4, 0.2), c(0.5, 0.2), c(0.6, 0.2), c(0.7, 0.2), c(0.7, 0.2)),
-  R0_prior            = c(log(2.95), 0.07),
+  f_prior             = rbind(c(0.4, 0.2), c(0.5, 0.2), c(0.6, 0.2), c(0.7, 0.2)),
+  R0_prior            = c(log(2.6), 0.2),
   N_pop               = 5.1e6,
   fit_type            = "optimizing",
   iter                = 50
@@ -216,40 +329,36 @@ plot_residuals(
 
 <br>
 
-## Research question
-In November 2020, the public health authority introduced new measures in an
-attempt to slow the spread of COVID-19 in the province. These included a
-mandatory mask policy for all indoor public spaces, travel restrictions and the
-banning of private gatherings with individuals outside the household. Can we
-develop a model based on BC's COVID data to project possible outcomes had these
-measures been implemented earlier or later?
+So we still have a problem with the residuals going crazy along with our spike
+in cases over the fall (BC's second wave)...
 
 <br>
 
-## Developing a new model
-Since at moment I don't want to try and figure out how to ignore the social
-distancing ramp (to allow us to start at a later date, e.g. September), let's 
-just filter the data to the end of December 2020.
-```{r}
+### Attempt 2
+It seems the previous estimate of R0 I was using (2.95) came from the
+supplemental material of a publication from the `covidseir` group. Here's the
+[link](https://journals.plos.org/ploscompbiol/article?id=10.1371/journal.pcbi.1008274#sec008);
+I'm going to start using that value again and tweak some other parameters.
+```{r attempt2}
 model_input_v2 <- bc_data_daily_cases %>%
   filter(reported_date <= ymd("20201231")) %>% 
   mutate(day = 1:nrow(.))
 
-samp_frac_v2 <- c(
-  rep(0.14, 13),
-  rep(0.21, 38),
-  rep(0.37, 125),
-  rep(0.45, nrow(model_input_v2) - (13 + 38 + 125))
-)
-
 model_input_v2 <- model_input_v2 %>%
   mutate(
     f_seg = case_when(
-      reported_date == ymd("2020-01-29") ~ 0,
-      reported_date < ymd("20200501") ~ 1,
-      between(reported_date, ymd("2020-05-01"), ymd("2020-06-01")) ~ 2,
-      between(reported_date, ymd("2020-06-02"), ymd("2020-11-15")) ~ 3,
-      between(reported_date, ymd("2020-11-16"), ymd("2020-12-31")) ~ 4,
+      reported_date == ymd("20200129") ~ 0,
+      reported_date <= ymd("20200430") ~ 1,
+      reported_date <= ymd("20200531") ~ 2,
+      reported_date <= ymd("20201114") ~ 3,
+      reported_date <= ymd("20201231") ~ 4,
+      TRUE ~ 9
+    ),
+    samp_frac = case_when(
+      reported_date <= ymd("20200311") ~ 0.14,
+      reported_date <= ymd("20200418") ~ 0.21,
+      reported_date <= ymd("20200831") ~ 0.37,
+      reported_date >= ymd("20200901") ~ 0.45,
       TRUE ~ 9
     )
   )
@@ -257,14 +366,14 @@ model_input_v2 <- model_input_v2 %>%
 seir_real_dat_v2 <- fit_seir(
   daily_cases         = model_input_v2$daily_cases,
   f_seg               = model_input_v2$f_seg,
-  samp_frac_fixed     = samp_frac_v2,
+  samp_frac_fixed     = model_input_v2$samp_frac,
   days_back           = 60,
   i0_prior            = c(log(8), 1),
   e_prior             = c(0.8, 0.05),
   start_decline_prior = c(log(15), 0.1),
   end_decline_prior   = c(log(22), 0.1),
-  f_prior             = rbind(c(0.4, 0.2), c(0.5, 0.2), c(0.6, 0.2), c(0.7, 0.2)),
-  R0_prior            = c(log(2.6), 0.2),
+  f_prior             = rbind(c(0.4, 0.2), c(0.5, 0.2), c(0.6, 0.2), c(0.6, 0.2)),
+  R0_prior            = c(log(2.95), 0.07),
   N_pop               = 5.1e6,
   fit_type            = "optimizing",
   iter                = 50
@@ -297,11 +406,6 @@ plot_residuals(
   theme_bw(base_size = 16) +
   labs(x = "Day")
 ```
-
-<br>
-
-So we still have a problem with the residuals going crazy along with our spike
-in cases over the fall (BC's second wave)...
 
 <br>
 

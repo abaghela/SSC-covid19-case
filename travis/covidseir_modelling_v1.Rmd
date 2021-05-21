@@ -104,8 +104,8 @@ bc_data_daily_cases %>%
 ### Daily cases, September 1 - December 31 2020, with highlighted dates
 ```{r plot_restrictions_labelled}
 major_restrictions <- c(
-  "2020-11-07" = "No private gatherings.",
-  "2020-11-19" = "Masks mandated in stores.\n Non-essential travel\n discouraged."
+  "2020-11-07" = " Nov. 7th:\nNo private gatherings.",
+  "2020-11-19" = " Nov. 19th:\nMasks mandated in stores.\n Non-essential travel\n discouraged."
   # "2021-03-11" = "Outdoor gathering \nof 10 people allowed",
   # "2021-03-29" = "\n\n\nNo indoor dining\nNo indoor group activity\nMasks grades 4-12"
 )
@@ -113,7 +113,7 @@ major_restrictions <- c(
 major_restrictions_tbl <- tibble(
   date = names(major_restrictions),
   text = major_restrictions,
-  yval = c(150, 350)
+  yval = c(200, 400)
 )
 
 bc_data_daily_cases %>%
@@ -405,6 +405,76 @@ plot_residuals(
 ) +
   theme_bw(base_size = 16) +
   labs(x = "Day")
+```
+
+<br<
+
+## Trying some projections
+```{r projection1}
+model_input_v3 <- bc_data_daily_cases %>%
+  filter(reported_date <= ymd("20201115")) %>% 
+  mutate(day = 1:nrow(.))
+
+all_days_v3 <- bc_data_daily_cases %>% 
+  filter(reported_date <= ymd("20201231")) %>% 
+  mutate(day = 1:nrow(.)) %>% 
+  select(day, reported_date)
+
+model_input_v3 <- model_input_v3 %>%
+  mutate(
+    f_seg = case_when(
+      reported_date == ymd("20200129") ~ 0,
+      reported_date <= ymd("20200430") ~ 1,
+      reported_date <= ymd("20200531") ~ 2,
+      reported_date <= ymd("20201115") ~ 3,
+      TRUE ~ 9
+    ),
+    samp_frac = case_when(
+      reported_date <= ymd("20200311") ~ 0.14,
+      reported_date <= ymd("20200418") ~ 0.21,
+      reported_date <= ymd("20200831") ~ 0.37,
+      reported_date >= ymd("20200901") ~ 0.45,
+      TRUE ~ 9
+    )
+  )
+
+seir_real_dat_v3 <- fit_seir(
+  daily_cases         = model_input_v3$daily_cases,
+  f_seg               = model_input_v3$f_seg,
+  samp_frac_fixed     = model_input_v3$samp_frac,
+  days_back           = 60,
+  i0_prior            = c(log(8), 1),
+  e_prior             = c(0.8, 0.05),
+  start_decline_prior = c(log(15), 0.1),
+  end_decline_prior   = c(log(22), 0.1),
+  f_prior             = rbind(c(0.4, 0.2), c(0.5, 0.2), c(0.6, 0.2)),
+  R0_prior            = c(log(2.95), 0.07),
+  N_pop               = 5.1e6,
+  fit_type            = "optimizing",
+  iter                = 50
+)
+
+project_real_dat_v3 <- project_seir(
+  obj           = seir_real_dat_v3, 
+  iter          = 1:50, 
+  forecast_days = 45,
+  f_fixed_start = max(seir_real_dat_v3$days) + 5,
+  f_multi       = rep(0.67, 45 - 5 + 1),
+  f_multi_seg   = 3
+)
+
+project_real_tidy_v3 <- 
+  tidy_seir(project_real_dat_v3, resample_y_rep = 20) %>% 
+  left_join(., all_days_v3, by = "day")
+
+plot_projection(
+  pred_dat     = project_real_tidy_v3,
+  obs_dat      = model_input_v3,
+  value_column = "daily_cases",
+  date_column  = "reported_date",
+) +
+  theme_bw(base_size = 16) +
+  labs(x = "Date")
 ```
 
 <br>

@@ -1,0 +1,188 @@
+---
+title: "SSC Covid Analysis"
+output: html_document
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(
+  echo    = TRUE, 
+  message = FALSE, 
+  warning = FALSE,
+  fig.width  = 11,
+  fig.height = 5)
+```
+
+Load packages.
+```{r, include=FALSE}
+library(tidyverse)
+library(magrittr)
+library(covidseir)
+library(knitr)
+```
+
+Read in data. 
+```{r}
+dat <- read_csv("../bc_data/BCCDC_COVID19_Dashboard_Case_Details.csv") %>% 
+  janitor::clean_names()
+dat_daily_cases <- dat %>% 
+  group_by(reported_date) %>% 
+  summarize(active_cases = n())
+```
+
+Plot cases from Jan 1st 2020 to May 15th 2021. We have included noteable BC restrictions in the plot; which we are intersted in learning more about their effect. 
+```{r }
+major_restrictions <- 
+  c("2020-11-07"= "No private gatherings",
+    "2020-11-19"= "Masks in stores. \nTravel discouraged.",
+    "2021-03-11"= "Outdoor gathering \nof 10 people allowed",
+    "2021-03-29"= "No indoor dining\nNo indoor group activity\nMasks grades 4-12")
+
+ggplot(dat_daily_cases, aes(reported_date, active_cases)) + 
+  geom_line() + 
+  geom_vline(xintercept = as.Date(names(major_restrictions)), linetype="dashed",color="darkred", alpha = 0.5 ) +
+  geom_text(aes(x=as.Date(names(major_restrictions))[1], label= major_restrictions[1], y=2000), 
+            angle = 90, colour="red", text=element_text(size=3)) + 
+  geom_text(aes(x=as.Date(names(major_restrictions))[2], label= major_restrictions[2], y=2000), 
+            angle = 90, colour="red", text=element_text(size=3)) + 
+  geom_text(aes(x=as.Date(names(major_restrictions))[3], label= major_restrictions[3], y=2000), 
+            angle = 90, colour="darkgreen", text=element_text(size=3)) +
+  geom_text(aes(x=as.Date(names(major_restrictions))[4], label= major_restrictions[4], y=2000), 
+            angle = 90, colour="red", text=element_text(size=3)) + 
+  ylim(0,3000)
+```
+
+For the time being, lets focus on the first pair of restrictions which occured in early Nov 2020. 
+```{r}
+dat_daily_cases_filt <-  dat_daily_cases %>% 
+  filter(reported_date >="2020-09-01") %>% 
+  filter(reported_date <= "2021-03-01") %>% 
+  mutate(day = 1:nrow(.))
+
+dat_daily_cases_filt_proj <-  dat_daily_cases %>% 
+  filter(reported_date >="2020-09-01") %>% 
+  mutate(day = 1:nrow(.))
+
+ggplot(dat_daily_cases_filt, aes(reported_date, active_cases)) + 
+  geom_line() + 
+  geom_vline(xintercept = as.Date(names(major_restrictions)), linetype="dashed",color="darkred", alpha = 0.5 ) +
+  geom_text(aes(x=as.Date(names(major_restrictions))[1], label= major_restrictions[1], y=2000), 
+            angle = 90, colour="red", text=element_text(size=1)) + 
+  geom_text(aes(x=as.Date(names(major_restrictions))[2], label= major_restrictions[2], y=2000), 
+            angle = 90, colour="red", text=element_text(size=1)) + 
+  ylim(0,3000) + 
+  scale_x_date(date_breaks = "1 month")
+
+```
+
+Question: Is September 1st to March 1st an appropriate timeline to model the cases influencing/influenced by the early November restrictions?
+
+First model:
+```{r}
+# First Date/Last Date
+first_date = dat_daily_cases_filt$reported_date[1]
+last_date = dat_daily_cases_filt$reported_date[nrow(dat_daily_cases_filt)]
+
+# Sample Fraction - estimation of the positive cases that are sampled/detected/
+samp_frac <- rep(0.45, nrow(dat_daily_cases_filt))
+
+# Contact rate breakpoints
+f_seg_dates <- c(
+  first_date, # First day
+  as.Date("2020-11-07"), # First restriction
+  as.Date("2020-11-19"), # Second restriction
+  last_date # Last day
+  )
+
+f_seg = c(0)
+for ( i in 1:(length(f_seg_dates)-1)) {
+  f_seg = c(f_seg, rep(i,f_seg_dates[i+1] - f_seg_dates[i]) )
+  }
+nrow(dat_daily_cases_filt) == length(f_seg)
+
+# Infected people at initial point in time.
+i0 = dat_daily_cases %>% 
+  filter((reported_date >= (first_date - 30) & reported_date <= first_date)) %>% 
+  pull(active_cases) %>% 
+  sum()
+
+# Fit model
+fit <- fit_seir(
+  daily_cases = dat_daily_cases_filt$active_cases,
+  samp_frac_fixed = samp_frac, 
+  f_seg = f_seg,
+  i0_prior = c(log(i0), 1), 
+  e_prior = c(0.8, 0.05),
+  start_decline_prior = c(log(15), 0.1),
+  end_decline_prior = c(log(22), 0.1),
+  f_prior = cbind(c(0.4, 0.5, 0.6), c(0.2, 0.2, 0.2)),
+  R0_prior = c(log(3), 0.2),
+  N_pop = 5.7e6, # BC population
+  iter = 500, # number of posterior samples
+  fit_type = "optimizing" # for speed only
+)
+
+proj <- fit %>% 
+  covidseir::project_seir(iter = 1:50) 
+
+tidy_proj <- proj %>% 
+  covidseir::tidy_seir(resample_y_rep = 20) %>%
+  left_join(dat_daily_cases_filt, by = "day")
+
+# Plot Projection
+plot_projection(tidy_proj, 
+                obs_dat = dat_daily_cases_filt,
+                value_column = "active_cases", date_column = "reported_date"
+                )
+
+# Plot Residuals
+plot_residuals(tidy_proj, 
+               obs_dat = dat_daily_cases_filt, 
+               obj = fit, 
+               value_column = "active_cases", date_column = "reported_date"
+               )
+
+set.seed(1)
+plot_residuals(tidy_proj, 
+               obs_dat = dat_daily_cases_filt,
+               obj = fit, 
+               type = "quantile",
+               value_column = "active_cases", date_column = "reported_date",
+               return_residuals = FALSE
+               )
+
+set.seed(1)
+resid <- plot_residuals(tidy_proj, 
+               obs_dat = dat_daily_cases_filt, 
+               obj = fit, 
+               type = "quantile",
+               value_column = "active_cases", date_column = "reported_date",
+               return_residuals = TRUE
+               )
+hist(resid)
+qqline(resid)
+
+
+```
+
+Projections.
+```{r}
+days_to_project = dat_daily_cases$reported_date[nrow(dat_daily_cases)] - 
+  dat_daily_cases_filt$reported_date[nrow(dat_daily_cases_filt)]
+day_start_reduction <- 60
+
+proj2 <- covidseir::project_seir(
+  fit,
+  iter = 1:50,
+  forecast_days = days_to_project,
+  f_fixed_start = max(fit$days) + day_start_reduction,
+  f_multi = rep(1, days_to_project - day_start_reduction + 1),
+  f_multi_seg = 3 # which f segment to use
+)
+
+tidy_proj2 <- covidseir::tidy_seir(proj2, resample_y_rep = 30)
+tidy_proj2 <- dplyr::left_join(tidy_proj2, dat_daily_cases_filt_proj, by = "day")
+
+covidseir::plot_projection(tidy_proj2, obs_dat = dat_daily_cases_filt_proj,
+                           value_column = "active_cases", date_column = "reported_date")
+```
+

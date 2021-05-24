@@ -1,13 +1,13 @@
 ---
-  title: "Using covidseir to model COVID-19 in B.C. (v2)"
+title: "Using covidseir to model COVID-19 in B.C. (v2)"
 author: "Travis Blimkie, Arjun Baghela & Hossameldin Mohammed"
 date: "`r format(Sys.time(), '%B %d, %Y')`"
 output:
   html_document:
-  theme: readable
-highlight: kate
-fig_caption: yes
-toc: yes
+    theme: readable
+    highlight: kate
+    fig_caption: yes
+    toc: yes
 ---
 
 ```{r setup, include = FALSE}
@@ -39,6 +39,8 @@ We're using the BC COVID-19 case data from the BC CDC, downloaded on May 17th,
 [link](http://www.bccdc.ca/health-info/diseases-conditions/covid-19/data).
 
 ```{r load_data}
+rstan_obj <- readRDS("rstan_obj.Rds")
+
 bc_data <-
   read_csv("../bc_data/BCCDC_COVID19_Dashboard_Case_Details.csv") %>%
   janitor::clean_names()
@@ -60,24 +62,6 @@ ggplot(bc_data_daily_cases, aes(reported_date, daily_cases)) +
   labs(
     x = "Date",
     y = "Daily Case Count"
-  )
-```
-
-<br>
-
-### Daily cases, January 29 2020 - May 17 2021, coloured by region
-```{r daily_cases_region}
-bc_data %>%
-  group_by(reported_date, ha) %>%
-  summarise(daily_cases = n()) %>%
-  ggplot(., aes(reported_date, daily_cases, fill = ha)) +
-  geom_col(alpha = 0.5) +
-  theme_bw(base_size = 16) +
-  scale_y_continuous(expand = c(0, 0)) +
-  labs(
-    x = "Date",
-    y = "Daily Case Count",
-    fill = "Region"
   )
 ```
 
@@ -141,3 +125,123 @@ bc_data_daily_cases %>%
     hjust = -0.05
   )
 ```
+
+<br>
+
+## Fitting a model to the data
+### Starting in September
+```{r model_fitting_sept}
+case_data_sept <- bc_data_daily_cases %>%
+  filter(between(reported_date, ymd("20200901"), ymd("20201231"))) %>% 
+  mutate(
+    day = 1:nrow(.),
+    f_seg = case_when(
+      reported_date == ymd("20200901") ~ 0,
+      reported_date <= ymd("20201114") ~ 1,
+      TRUE ~ 2
+    )
+  )
+
+# Value for i0_prior taken from currently active cases at:
+# http://www.bccdc.ca/Health-Info-Site/Documents/BC_Surveillance_Summary_Sept_3_2020.pdf
+seir_model_sept <- fit_seir(
+  daily_cases     = case_data_sept$daily_cases,
+  stan_model      = rstan_obj,
+  samp_frac_fixed = rep(0.37, nrow(case_data_sept)),
+  e_prior         = c(0.8, 0.05),
+  use_ramp        = FALSE,
+  f_seg           = case_data_sept$f_seg,
+  f_prior         = c(0.4, 0.2),
+  R0_prior        = c(log(2.95), 0.07),
+  i0_prior        = c(log(1000), 1),
+  N_pop           = 5.1e6,
+  iter            = 500,
+  fit_type        = "optimizing"
+)
+
+seir_model_sept_project <- project_seir(
+  obj = seir_model_sept,
+  stan_model = rstan_obj,
+  iter = 1:50
+)
+
+seir_model_sept_tidy <- tidy_seir(seir_model_sept_project) %>% 
+  left_join(., case_data_sept, by = "day")
+
+plot_projection(
+  pred_dat = seir_model_sept_tidy,
+  obs_dat = case_data_sept,
+  value_column = "daily_cases",
+  date_column = "reported_date"
+) +
+  theme_bw() +
+  labs(x = "Reported Date", y = "Daily Cases")
+
+plot_residuals(
+  pred_dat = seir_model_sept_tidy,
+  obs_dat = case_data_sept,
+  obj = seir_model_sept,
+  value_column = "daily_cases",
+  date_column = "reported_date"
+) +
+  theme_bw() +
+  labs(x = "Reported Date")
+```
+
+### Starting in October
+```{r model_fitting_oct}
+case_data_oct <- bc_data_daily_cases %>%
+  filter(between(reported_date, ymd("20201001"), ymd("20201231"))) %>% 
+  mutate(
+    day = 1:nrow(.),
+    f_seg = case_when(
+      reported_date == ymd("20201001") ~ 0,
+      reported_date <= ymd("20201114") ~ 1,
+      TRUE ~ 2
+    )
+  )
+
+seir_model_oct <- fit_seir(
+  daily_cases     = case_data_oct$daily_cases,
+  stan_model      = rstan_obj,
+  samp_frac_fixed = rep(0.37, nrow(case_data_oct)),
+  e_prior         = c(0.8, 0.05),
+  use_ramp        = FALSE,
+  f_seg           = case_data_oct$f_seg,
+  f_prior         = c(0.4, 0.2),
+  R0_prior        = c(log(2.95), 0.07),
+  i0_prior        = c(log(1000), 1),
+  N_pop           = 5.1e6,
+  iter            = 500,
+  fit_type        = "optimizing"
+)
+
+seir_model_oct_project <- project_seir(
+  obj = seir_model_oct,
+  stan_model = rstan_obj,
+  iter = 1:50
+)
+
+seir_model_oct_tidy <- tidy_seir(seir_model_oct_project) %>% 
+  left_join(., case_data_oct, by = "day")
+
+plot_projection(
+  pred_dat = seir_model_oct_tidy,
+  obs_dat = case_data_oct,
+  value_column = "daily_cases",
+  date_column = "reported_date"
+) +
+  theme_bw() +
+  labs(x = "Reported Date", y = "Daily Cases")
+
+plot_residuals(
+  pred_dat = seir_model_oct_tidy,
+  obs_dat = case_data_oct,
+  obj = seir_model_oct,
+  value_column = "daily_cases",
+  date_column = "reported_date"
+) +
+  theme_bw() +
+  labs(x = "Reported Date")
+```
+

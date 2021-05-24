@@ -1,0 +1,143 @@
+---
+  title: "Using covidseir to model COVID-19 in B.C. (v2)"
+author: "Travis Blimkie, Arjun Baghela & Hossameldin Mohammed"
+date: "`r format(Sys.time(), '%B %d, %Y')`"
+output:
+  html_document:
+  theme: readable
+highlight: kate
+fig_caption: yes
+toc: yes
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(
+  echo    = TRUE,
+  message = FALSE,
+  warning = FALSE,
+  comment = "",
+  fig.width  = 9,
+  fig.height = 6
+)
+```
+
+
+## Load packages
+```{r libraries}
+suppressPackageStartupMessages({
+  library(covidseir)
+  library(lubridate)
+  library(tidyverse)
+})
+```
+
+<br>
+
+## Load data
+We're using the BC COVID-19 case data from the BC CDC, downloaded on May 17th,
+2021 from this
+[link](http://www.bccdc.ca/health-info/diseases-conditions/covid-19/data).
+
+```{r load_data}
+bc_data <-
+  read_csv("../bc_data/BCCDC_COVID19_Dashboard_Case_Details.csv") %>%
+  janitor::clean_names()
+
+bc_data_daily_cases <- bc_data %>%
+  group_by(reported_date) %>%
+  summarise(daily_cases = n())
+```
+
+<br>
+
+## Plot trends in case data
+### Daily cases, January 29 2020 - May 17 2021
+```{r daily_cases_all}
+ggplot(bc_data_daily_cases, aes(reported_date, daily_cases)) +
+  geom_col() +
+  theme_bw(base_size = 16) +
+  scale_y_continuous(expand = c(0, 0)) +
+  labs(
+    x = "Date",
+    y = "Daily Case Count"
+  )
+```
+
+<br>
+
+### Daily cases, January 29 2020 - May 17 2021, coloured by region
+```{r daily_cases_region}
+bc_data %>%
+  group_by(reported_date, ha) %>%
+  summarise(daily_cases = n()) %>%
+  ggplot(., aes(reported_date, daily_cases, fill = ha)) +
+  geom_col(alpha = 0.5) +
+  theme_bw(base_size = 16) +
+  scale_y_continuous(expand = c(0, 0)) +
+  labs(
+    x = "Date",
+    y = "Daily Case Count",
+    fill = "Region"
+  )
+```
+
+<br>
+
+### Daily cases, January 29 - December 31 2020
+```{r daily_cases_fall}
+bc_data_daily_cases %>%
+  filter(reported_date <= ymd("20201231")) %>%
+  ggplot(., aes(reported_date, daily_cases)) +
+  geom_point(pch = 21, fill = "dodgerblue", colour = "black") +
+  geom_line() +
+  theme_bw(base_size = 16) +
+  scale_y_continuous(expand = c(0, 20)) +
+  labs(
+    x = "Date",
+    y = "Daily Case Count"
+  )
+```
+
+<br>
+
+### Daily cases, September 1 - December 31 2020, with highlighted dates
+```{r plot_restrictions_labelled}
+major_restrictions <- c(
+  "2020-11-07" = " Nov. 7th:\nNo private gatherings.",
+  "2020-11-19" = " Nov. 19th:\nMasks mandated in stores.\n Non-essential travel\n discouraged."
+)
+
+major_restrictions_tbl <- tibble(
+  date = names(major_restrictions),
+  text = major_restrictions,
+  yval = c(200, 400)
+)
+
+bc_data_daily_cases %>%
+  filter(between(reported_date, ymd("20200901"), ymd("20201231"))) %>%
+  ggplot(., aes(reported_date, daily_cases)) +
+  geom_point(pch = 21, fill = "dodgerblue", colour = "black") +
+  geom_line() +
+  theme_bw(base_size = 16) +
+  scale_y_continuous(expand = c(0, 20)) +
+  labs(
+    x = "Date",
+    y = "Daily Case Count"
+  ) +
+  annotate(
+    geom = "vline",
+    x = ymd(major_restrictions_tbl$date),
+    xintercept = ymd(major_restrictions_tbl$date),
+    linetype = "dashed",
+    colour = "red",
+    size = 1
+  ) +
+  annotate(
+    geom = "label",
+    x = ymd(major_restrictions_tbl$date),
+    y = major_restrictions_tbl$yval,
+    label = major_restrictions_tbl$text,
+    vjust = 1,
+    hjust = -0.05
+  )
+```

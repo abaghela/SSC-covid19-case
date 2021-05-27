@@ -39,14 +39,19 @@ major_restrictions <-
 
 ggplot(dat_daily_cases, aes(reported_date, active_cases)) + 
   geom_line() + 
-  geom_vline(xintercept = as.Date(names(major_restrictions)), linetype="dashed",color="darkred", alpha = 0.5 ) +
-  geom_text(aes(x=as.Date(names(major_restrictions))[1], label= major_restrictions[1], y=2000), 
+  geom_vline(xintercept = as.Date(names(major_restrictions)),
+             linetype="dashed",color="darkred", alpha = 0.5 ) +
+  geom_text(aes(x=as.Date(names(major_restrictions))[1], 
+                label= major_restrictions[1], y=2000), 
             angle = 90, colour="red", text=element_text(size=3)) + 
-  geom_text(aes(x=as.Date(names(major_restrictions))[2], label= major_restrictions[2], y=2000), 
+  geom_text(aes(x=as.Date(names(major_restrictions))[2], 
+                label= major_restrictions[2], y=2000), 
             angle = 90, colour="red", text=element_text(size=3)) + 
-  geom_text(aes(x=as.Date(names(major_restrictions))[3], label= major_restrictions[3], y=2000), 
+  geom_text(aes(x=as.Date(names(major_restrictions))[3], 
+                label= major_restrictions[3], y=2000), 
             angle = 90, colour="darkgreen", text=element_text(size=3)) +
-  geom_text(aes(x=as.Date(names(major_restrictions))[4], label= major_restrictions[4], y=2000), 
+  geom_text(aes(x=as.Date(names(major_restrictions))[4], 
+                label= major_restrictions[4], y=2000), 
             angle = 90, colour="red", text=element_text(size=3)) + 
   ylim(0,3000)
 ```
@@ -54,8 +59,8 @@ ggplot(dat_daily_cases, aes(reported_date, active_cases)) +
 For the time being, lets focus on the first pair of restrictions which occured in early Nov 2020. 
 ```{r}
 dat_daily_cases_filt <-  dat_daily_cases %>% 
-  filter(reported_date >="2020-09-01") %>% 
-  filter(reported_date <= "2021-03-01") %>% 
+  filter(reported_date >="2020-10-01") %>% 
+  filter(reported_date <= "2021-01-01") %>% 
   mutate(day = 1:nrow(.))
 
 dat_daily_cases_filt_proj <-  dat_daily_cases %>% 
@@ -64,10 +69,13 @@ dat_daily_cases_filt_proj <-  dat_daily_cases %>%
 
 ggplot(dat_daily_cases_filt, aes(reported_date, active_cases)) + 
   geom_line() + 
-  geom_vline(xintercept = as.Date(names(major_restrictions)), linetype="dashed",color="darkred", alpha = 0.5 ) +
-  geom_text(aes(x=as.Date(names(major_restrictions))[1], label= major_restrictions[1], y=2000), 
+  geom_vline(xintercept = as.Date(names(major_restrictions)),
+             linetype="dashed",color="darkred", alpha = 0.5 ) +
+  geom_text(aes(x=as.Date(names(major_restrictions))[1], 
+                label= major_restrictions[1], y=2000), 
             angle = 90, colour="red", text=element_text(size=1)) + 
-  geom_text(aes(x=as.Date(names(major_restrictions))[2], label= major_restrictions[2], y=2000), 
+  geom_text(aes(x=as.Date(names(major_restrictions))[2], 
+                label= major_restrictions[2], y=2000), 
             angle = 90, colour="red", text=element_text(size=1)) + 
   ylim(0,3000) + 
   scale_x_date(date_breaks = "1 month")
@@ -108,15 +116,19 @@ i0 = dat_daily_cases %>%
 # Fit model
 fit <- fit_seir(
   daily_cases = dat_daily_cases_filt$active_cases,
+  forecast_days = 0,
   samp_frac_fixed = samp_frac, 
+  samp_frac_type = "fixed",
   f_seg = f_seg,
   i0_prior = c(log(i0), 1), 
-  e_prior = c(0.8, 0.05),
-  start_decline_prior = c(log(15), 0.1),
-  end_decline_prior = c(log(22), 0.1),
+  e_prior = c(0.5, 0.05),
+  #start_decline_prior = c(log(30), 0.1),
+  #end_decline_prior = c(log(100), 0.1),
+  use_ramp = FALSE,
+  rw_sigma = 0.2,
   f_prior = cbind(c(0.4, 0.5, 0.6), c(0.2, 0.2, 0.2)),
-  R0_prior = c(log(3), 0.2),
-  N_pop = 5.7e6, # BC population
+  R0_prior = c(log(2.6), 0.2), # Does not seem like it has a major effect
+  N_pop = 5.15e6, # BC population
   iter = 500, # number of posterior samples
   fit_type = "optimizing" # for speed only
 )
@@ -127,6 +139,8 @@ proj <- fit %>%
 tidy_proj <- proj %>% 
   covidseir::tidy_seir(resample_y_rep = 20) %>%
   left_join(dat_daily_cases_filt, by = "day")
+
+sum((tidy_proj$active_cases - tidy_proj$y_rep_mean)^2)/nrow(tidy_proj)
 
 # Plot Projection
 plot_projection(tidy_proj, 

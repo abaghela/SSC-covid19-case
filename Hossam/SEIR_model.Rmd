@@ -78,6 +78,10 @@ i0 = daily_cases %>%
   pull(active_cases) %>% 
   sum()
 
+daily_cases <-  daily_cases %>% 
+  mutate(day = 1:nrow(.))
+
+
 ```
 ```{r}
 
@@ -95,5 +99,23 @@ model <- fit_seir(
   iter = 500, # number of posterior samples
   fit_type = "optimizing" # for speed only
 )
+```
+
+
+
+```{r}
+proj <- model %>% 
+  covidseir::project_seir(iter = 1:50) 
+
+tidy_proj <- proj %>% 
+  covidseir::tidy_seir(resample_y_rep = 20) %>%
+  left_join(daily_cases, by = "day")
+
+# Plot Projection
+plot_projection(tidy_proj, 
+                obs_dat = daily_cases,
+                value_column = "active_cases", date_column = "reported_date"
+                )
+
 ```
 

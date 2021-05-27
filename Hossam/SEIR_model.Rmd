@@ -1,0 +1,99 @@
+---
+title: "SEIR_model"
+output: html_document
+---
+
+```{r}
+library(tidyverse)
+library(covidseir)
+```
+
+
+```{r}
+data <- read_csv("../bc_data/BCCDC_COVID19_Dashboard_Case_Details.csv") %>% 
+  janitor::clean_names()
+daily_cases  <- data %>% 
+  group_by(reported_date) %>% 
+  summarize(active_cases = n())
+
+```
+
+```{r}
+daily_cases
+```
+
+
+```{r}
+major_restrictions <- 
+  c("2020-11-07"= "No private gatherings",
+    "2020-11-19"= "Masks in stores. \nTravel discouraged.",
+    "2021-03-11"= "Outdoor gathering \nof 10 people allowed",
+    "2021-03-29"= "No indoor dining\nNo indoor group activity\nMasks grades 4-12")
+
+```
+
+
+
+
+```{r}
+ggplot(daily_cases, aes(reported_date, active_cases)) + 
+  geom_line() + 
+  geom_vline(xintercept = as.Date(names(major_restrictions)), alpha = 0.5 ) +
+  geom_text(aes(x=as.Date(names(major_restrictions))[1], label= major_restrictions[1], y=2000), 
+            angle = 90) + 
+  geom_text(aes(x=as.Date(names(major_restrictions))[2], label= major_restrictions[2], y=2000), 
+            angle = 90) + 
+  geom_text(aes(x=as.Date(names(major_restrictions))[3], label= major_restrictions[3], y=2000), 
+            angle = 90) +
+  geom_text(aes(x=as.Date(names(major_restrictions))[4], label= major_restrictions[4], y=2000), 
+            angle = 90) + 
+  ylim(0,3000)
+
+```
+
+
+
+
+```{r}
+first_date = daily_cases$reported_date[1]
+last_date = daily_cases $reported_date[nrow(daily_cases)]
+
+samp_frac <- rep(0.45, nrow(daily_cases))
+f_seg_dates <- c(
+  first_date, # First day
+  as.Date("2020-11-07"), # First restriction
+  as.Date("2020-11-19"), # Second restriction
+  last_date # Last day
+  )
+
+f_seg = c(0)
+for ( i in 1:(length(f_seg_dates)-1)) {
+  f_seg = c(f_seg, rep(i,f_seg_dates[i+1] - f_seg_dates[i]) )
+}
+nrow(daily_cases) == length(f_seg)
+
+# Infected people at initial point in time.
+i0 = daily_cases %>% 
+  filter((reported_date >= (first_date - 30) & reported_date <= first_date)) %>% 
+  pull(active_cases) %>% 
+  sum()
+
+```
+```{r}
+
+model <- fit_seir(
+  daily_cases = daily_cases$active_cases,
+  samp_frac_fixed = samp_frac, 
+  f_seg = f_seg,
+  i0_prior = c(log(i0), 1), 
+  e_prior = c(0.8, 0.05),
+  start_decline_prior = c(log(15), 0.1),
+  end_decline_prior = c(log(22), 0.1),
+  f_prior = cbind(c(0.4, 0.5, 0.6), c(0.2, 0.2, 0.2)),
+  R0_prior = c(log(3), 0.2),
+  N_pop = 5.7e6, # BC population
+  iter = 500, # number of posterior samples
+  fit_type = "optimizing" # for speed only
+)
+```
+

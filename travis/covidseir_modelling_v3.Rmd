@@ -1,0 +1,304 @@
+---
+title: "Using covidseir to model COVID-19 in B.C. (v3)"
+author: "Travis Blimkie, Arjun Baghela & Hossameldin Mohammed"
+date: "`r format(Sys.time(), '%B %d, %Y')`"
+output:
+  html_document:
+    theme: readable
+    highlight: kate
+    fig_caption: yes
+    toc: yes
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(
+  echo    = TRUE,
+  message = FALSE,
+  warning = FALSE,
+  comment = "",
+  fig.width  = 9,
+  fig.height = 6
+)
+```
+
+
+## Load packages
+```{r packages_and_setup}
+suppressPackageStartupMessages({
+  library(covidseir)
+  library(lubridate)
+  library(tidyverse)
+})
+
+theme_set(theme_bw(base_size = 16))
+```
+
+<br>
+
+## Load data
+We're using the BC COVID-19 case data from the BC CDC, downloaded on May 17th,
+2021 from this
+[link](http://www.bccdc.ca/health-info/diseases-conditions/covid-19/data).
+
+```{r load_data}
+bc_data <-
+  read_csv("../bc_data/BCCDC_COVID19_Dashboard_Case_Details.csv") %>%
+  janitor::clean_names()
+
+bc_data_daily_cases <- bc_data %>%
+  group_by(reported_date) %>%
+  summarise(daily_cases = n())
+```
+
+<br>
+
+## Plot trends in case data
+### Daily cases, January 29 2020 - May 17 2021
+```{r daily_cases_all}
+ggplot(bc_data_daily_cases, aes(reported_date, daily_cases)) +
+  geom_col() +
+  scale_y_continuous(expand = c(0, 0)) +
+  labs(
+    x = "Date",
+    y = "Daily Case Count"
+  )
+```
+
+<br>
+
+### Daily cases, January 29 - December 31 2020
+```{r daily_cases_fall}
+bc_data_daily_cases %>%
+  filter(reported_date <= ymd("20201231")) %>%
+  ggplot(., aes(reported_date, daily_cases)) +
+  geom_point(pch = 21, fill = "dodgerblue", colour = "black") +
+  geom_line() +
+  scale_y_continuous(expand = c(0, 20)) +
+  labs(
+    x = "Date",
+    y = "Daily Case Count"
+  )
+```
+
+<br>
+
+### Daily cases, September 1 - December 31 2020, with highlighted dates
+```{r plot_restrictions_labelled}
+major_restrictions <- c(
+  "2020-11-07" = " Nov. 7th:\nNo private gatherings.",
+  "2020-11-19" = " Nov. 19th:\nMasks mandated in stores.\n Non-essential travel\n discouraged."
+)
+
+major_restrictions_tbl <- tibble(
+  date = names(major_restrictions),
+  text = major_restrictions,
+  yval = c(200, 400)
+)
+
+bc_data_daily_cases %>%
+  filter(between(reported_date, ymd("20200901"), ymd("20201231"))) %>%
+  ggplot(., aes(reported_date, daily_cases)) +
+  geom_point(pch = 21, fill = "dodgerblue", colour = "black") +
+  geom_line() +
+  scale_y_continuous(expand = c(0, 20)) +
+  labs(
+    x = "Date",
+    y = "Daily Case Count"
+  ) +
+  annotate(
+    geom = "vline",
+    x = ymd(major_restrictions_tbl$date),
+    xintercept = ymd(major_restrictions_tbl$date),
+    linetype = "dashed",
+    colour = "red",
+    size = 1
+  ) +
+  annotate(
+    geom = "label",
+    x = ymd(major_restrictions_tbl$date),
+    y = major_restrictions_tbl$yval,
+    label = major_restrictions_tbl$text,
+    vjust = 1,
+    hjust = -0.05
+  )
+```
+
+<br>
+
+## Fitting a model to the data
+```{r model_seir}
+bc_data_fall <- bc_data_daily_cases %>% 
+  filter(between(reported_date, ymd(20201001), ymd(20210101))) %>% 
+  mutate(
+    day = 1:nrow(.),
+    f_seg = case_when(
+      reported_date == ymd(20201001) ~ 0,
+      reported_date <= ymd(20201106) ~ 1,
+      reported_date <= ymd(20201118) ~ 2,
+      TRUE ~ 3
+    )
+  )
+
+i0_value <- bc_data_daily_cases %>% 
+  filter(between(reported_date, ymd(20201001) - 30, ymd(20201001))) %>% 
+  pull(daily_cases) %>% 
+  sum()
+
+seir_model_1 <- fit_seir(
+  daily_cases     = bc_data_fall$daily_cases,
+  forecast_days   = 0,
+  samp_frac_fixed = rep(0.45, nrow(bc_data_fall)),
+  samp_frac_type  = "fixed",
+  f_seg           = bc_data_fall$f_seg,
+  i0_prior        = c(log(i0_value), 1), 
+  e_prior         = c(0.5, 0.05),
+  use_ramp        = FALSE,
+  rw_sigma        = 0.2,
+  f_prior         = cbind(c(0.4, 0.5, 0.6), c(0.2, 0.2, 0.2)),
+  R0_prior        = c(log(2.6), 0.2),
+  N_pop           = 5.15e6,
+  iter            = 500,
+  fit_type        = "optimizing"
+)
+
+seir_projection_1 <- project_seir(seir_model_1, iter = 1:50)
+
+seir_tidy_1 <- tidy_seir(seir_projection_1, resample_y_rep = 20) %>% 
+  left_join(bc_data_fall, by = "day")
+
+plot_projection(
+  pred_dat = seir_tidy_1,
+  obs_dat = bc_data_fall,
+  value_column = "daily_cases",
+  date_column = "reported_date"
+)
+
+plot_residuals(
+  pred_dat = seir_tidy_1,
+  obj = seir_model_1,
+  obs_dat = bc_data_fall,
+  value_column = "daily_cases",
+  date_column = "reported_date",
+)
+```
+
+<br>
+
+## Making projections
+### No implementation of restrictions on either date (Nov. 7th or 19th)
+```{r project_cases_1}
+model_start_date <- ymd(20201001)
+model_end_date   <- ymd(20201120)
+
+days_to_project <- ymd(20210101) - model_end_date
+
+bc_data_Nov <- bc_data_daily_cases %>% 
+  filter(between(reported_date, model_start_date, model_end_date)) %>% 
+  mutate(
+    day = 1:nrow(.),
+    f_seg = case_when(
+      reported_date == model_start_date ~ 0,
+      TRUE ~ 1
+    )
+  )
+
+seir_model_2 <- fit_seir(
+  daily_cases     = bc_data_Nov$daily_cases,
+  forecast_days   = 0,
+  samp_frac_fixed = rep(0.45, nrow(bc_data_Nov)),
+  samp_frac_type  = "fixed",
+  f_seg           = bc_data_Nov$f_seg,
+  i0_prior        = c(log(i0_value), 1), 
+  e_prior         = c(0.5, 0.05),
+  use_ramp        = FALSE,
+  rw_sigma        = 0.2,
+  f_prior         = c(0.4, 0.2), # Use first set of values since we have only 1 f_seg
+  R0_prior        = c(log(2.6), 0.2),
+  N_pop           = 5.15e6,
+  iter            = 500,
+  fit_type        = "optimizing"
+)
+
+seir_projection_2 <- project_seir(
+  seir_model_2,
+  iter = 1:50,
+  forecast_days = days_to_project
+)
+
+seir_tidy_2 <- tidy_seir(seir_projection_2, resample_y_rep = 20) %>% 
+  left_join(bc_data_Nov, by = "day") %>% 
+  mutate(reported_date = seq(model_start_date, ymd(20210101), by = "1 days"))
+
+plot_projection(
+  seir_tidy_2,
+  obs_dat = bc_data_Nov,
+  value_column = "daily_cases",
+  date_column = "reported_date"
+)
+```
+
+<br>
+
+### Restrictions on the 7th, but not the 19th
+```{r project_cases_2}
+model_start_date <- ymd(20201001)
+model_end_date   <- ymd(20201120)
+
+days_to_project <- ymd(20210101) - model_end_date
+
+bc_data_Nov7 <- bc_data_daily_cases %>% 
+  filter(between(reported_date, model_start_date, model_end_date)) %>% 
+  mutate(
+    day = 1:nrow(.),
+    f_seg = case_when(
+      reported_date == model_start_date ~ 0,
+      reported_date <= ymd(20201106) ~ 1,
+      TRUE ~ 2
+    )
+  )
+
+seir_model_3 <- fit_seir(
+  daily_cases     = bc_data_Nov7$daily_cases,
+  forecast_days   = 0,
+  samp_frac_fixed = rep(0.45, nrow(bc_data_Nov7)),
+  samp_frac_type  = "fixed",
+  f_seg           = bc_data_Nov7$f_seg,
+  i0_prior        = c(log(i0_value), 1), 
+  e_prior         = c(0.5, 0.05),
+  use_ramp        = FALSE,
+  rw_sigma        = 0.2,
+  f_prior         = cbind(c(0.4, 0.5), c(0.2, 0.2)),
+  R0_prior        = c(log(2.6), 0.2),
+  N_pop           = 5.15e6,
+  iter            = 500,
+  fit_type        = "optimizing"
+)
+
+seir_projection_3 <- project_seir(
+  seir_model_3,
+  iter = 1:50,
+  forecast_days = days_to_project
+)
+
+seir_tidy_3 <- tidy_seir(seir_projection_3, resample_y_rep = 20) %>% 
+  left_join(bc_data_Nov7, by = "day") %>% 
+  mutate(reported_date = seq(model_start_date, ymd(20210101), by = "1 days"))
+
+plot_projection(
+  seir_tidy_3,
+  obs_dat = bc_data_Nov7,
+  value_column = "daily_cases",
+  date_column = "reported_date"
+)
+```
+
+
+<br>
+
+***
+
+```{r sessionInfo}
+sessionInfo()
+```

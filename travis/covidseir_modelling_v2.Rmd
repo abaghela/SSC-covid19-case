@@ -8,6 +8,8 @@ output:
     highlight: kate
     fig_caption: yes
     toc: yes
+editor_options: 
+  chunk_output_type: console
 ---
 
 ```{r setup, include = FALSE}
@@ -25,6 +27,7 @@ knitr::opts_chunk$set(
 ## Load packages
 ```{r libraries}
 suppressPackageStartupMessages({
+  library(rstan)
   library(covidseir)
   library(lubridate)
   library(tidyverse)
@@ -174,7 +177,7 @@ plot_projection(
   value_column = "daily_cases",
   date_column = "reported_date"
 ) +
-  theme_bw() +
+  theme_bw(base_size = 16) +
   labs(x = "Reported Date", y = "Daily Cases")
 
 plot_residuals(
@@ -184,7 +187,7 @@ plot_residuals(
   value_column = "daily_cases",
   date_column = "reported_date"
 ) +
-  theme_bw() +
+  theme_bw(base_size = 16) +
   labs(x = "Reported Date")
 ```
 
@@ -231,7 +234,7 @@ plot_projection(
   value_column = "daily_cases",
   date_column = "reported_date"
 ) +
-  theme_bw() +
+  theme_bw(base_size = 16) +
   labs(x = "Reported Date", y = "Daily Cases")
 
 plot_residuals(
@@ -241,7 +244,78 @@ plot_residuals(
   value_column = "daily_cases",
   date_column = "reported_date"
 ) +
-  theme_bw() +
+  theme_bw(base_size = 16) +
   labs(x = "Reported Date")
 ```
 
+Since this model gives us a slightly better fit with reduced residuals, we'll 
+use it going forward with our projections.
+
+<br>
+
+## Making projections
+```{r}
+case_data_oct_toProject <- bc_data_daily_cases %>%
+  filter(between(reported_date, ymd("20201001"), ymd("20201114"))) %>% 
+  mutate(
+    day = 1:nrow(.),
+    f_seg = case_when(
+      reported_date == ymd("20201001") ~ 0,
+      TRUE ~ 1
+    )
+  )
+
+seir_model_oct_toProject <- fit_seir(
+  daily_cases     = case_data_oct_toProject$daily_cases,
+  stan_model      = rstan_obj,
+  samp_frac_fixed = rep(0.37, nrow(case_data_oct_toProject)),
+  e_prior         = c(0.8, 0.05),
+  use_ramp        = FALSE,
+  f_seg           = case_data_oct_toProject$f_seg,
+  f_prior         = c(0.4, 0.2),
+  R0_prior        = c(log(2.95), 0.07),
+  i0_prior        = c(log(1000), 1),
+  N_pop           = 5.1e6,
+  iter            = 500,
+  fit_type        = "optimizing"
+)
+
+seir_model_oct_projection <- project_seir(
+  obj = seir_model_oct_toProject,
+  stan_model = rstan_obj,
+  forecast_days = 45,
+  f_fixed = c(rep(2, 81)),
+  f_fixed_start = 10,
+  iter = 1:50
+)
+
+seir_model_oct_tidy_projected <- tidy_seir(seir_model_oct_projection) %>% 
+  left_join(., case_data_oct_toProject, by = "day")
+
+plot_projection(
+  pred_dat = seir_model_oct_tidy_projected,
+  obs_dat = case_data_oct_toProject,
+  value_column = "daily_cases",
+  date_column = "reported_date"
+) +
+  theme_bw(base_size = 16) +
+  labs(x = "Reported Date", y = "Daily Cases")
+
+plot_residuals(
+  pred_dat = seir_model_oct_tidy_projected,
+  obs_dat = case_data_oct_toProject,
+  obj = seir_model_oct_projection,
+  value_column = "daily_cases",
+  date_column = "reported_date"
+) +
+  theme_bw(base_size = 16) +
+  labs(x = "Reported Date")
+```
+
+<br>
+
+***
+
+```{r sessionInfo}
+sessionInfo()
+```

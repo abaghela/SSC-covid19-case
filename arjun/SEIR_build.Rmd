@@ -22,7 +22,7 @@ library(knitr)
 
 Read in data. 
 ```{r}
-dat <- read_csv("../bc_data/BCCDC_COVID19_Dashboard_Case_Details.csv") %>% 
+dat <- read_csv("./bc_data/BCCDC_COVID19_Dashboard_Case_Details.csv") %>% 
   janitor::clean_names()
 dat_daily_cases <- dat %>% 
   group_by(reported_date) %>% 
@@ -132,6 +132,8 @@ fit <- fit_seir(
   iter = 500, # number of posterior samples
   fit_type = "optimizing" # for speed only
 )
+
+write_rds(fit, "./arjun/SEIR_FIT.RDS")
 
 proj <- fit %>% 
   covidseir::project_seir(iter = 1:50) 

@@ -94,13 +94,13 @@ major_restrictions <- c(
 major_restrictions_tbl <- tibble(
   date = names(major_restrictions),
   text = major_restrictions,
-  yval = c(200, 400)
+  yval = c(175, 380)
 )
 
 bc_data_daily_cases %>%
   filter(between(reported_date, ymd("20200901"), ymd("20201231"))) %>%
   ggplot(., aes(reported_date, daily_cases)) +
-  geom_point(pch = 21, fill = "dodgerblue", colour = "black") +
+  geom_point(pch = 21, fill = "dodgerblue", colour = "black", size = 2) +
   geom_line() +
   scale_y_continuous(expand = c(0, 20)) +
   labs(
@@ -113,16 +113,19 @@ bc_data_daily_cases %>%
     xintercept = ymd(major_restrictions_tbl$date),
     linetype = "dashed",
     colour = "red",
-    size = 1
+    size = 1.2
   ) +
   annotate(
     geom = "label",
     x = ymd(major_restrictions_tbl$date),
     y = major_restrictions_tbl$yval,
     label = major_restrictions_tbl$text,
+    size = 5,
     vjust = 1,
     hjust = -0.05
-  )
+  ) +
+  theme_bw(base_size = 20)
+ggsave("case_plot.png", dpi = 250, height = 6, width = 9)
 ```
 
 <br>
@@ -173,7 +176,12 @@ plot_projection(
   obs_dat = bc_data_fall,
   value_column = "daily_cases",
   date_column = "reported_date"
-)
+) +
+  theme_bw(base_size = 18) +
+  labs(x = "Date") +
+  theme(plot.margin = unit(c(0.5, 0.8, 0.4, 0.4), "cm"))
+# ggsave("model_fit_to_data.png", dpi = 250, height = 6, width = 9)
+
 
 plot_residuals(
   pred_dat = seir_tidy_1,
@@ -192,7 +200,7 @@ plot_residuals(
 model_start_date <- ymd(20201001)
 model_end_date   <- ymd(20201120)
 
-days_to_project <- ymd(20210101) - model_end_date
+days_to_project <- ymd(20201215) - model_end_date
 
 bc_data_Nov <- bc_data_daily_cases %>% 
   filter(between(reported_date, model_start_date, model_end_date)) %>% 
@@ -229,14 +237,19 @@ seir_projection_2 <- project_seir(
 
 seir_tidy_2 <- tidy_seir(seir_projection_2, resample_y_rep = 20) %>% 
   left_join(bc_data_Nov, by = "day") %>% 
-  mutate(reported_date = seq(model_start_date, ymd(20210101), by = "1 days"))
+  mutate(reported_date = seq(model_start_date, ymd(20201215), by = "1 days"))
 
 plot_projection(
   seir_tidy_2,
   obs_dat = bc_data_Nov,
   value_column = "daily_cases",
   date_column = "reported_date"
-)
+) +
+  theme_bw(base_size = 18) +
+  labs(x = "Date") +
+  theme(plot.margin = unit(c(0.5, 0.9, 0.4, 0.4), "cm"))
+# ggsave("model_projection_no_interventions.png", dpi = 250, height = 6, width = 9)
+
 ```
 
 <br>
@@ -246,7 +259,7 @@ plot_projection(
 model_start_date <- ymd(20201001)
 model_end_date   <- ymd(20201120)
 
-days_to_project <- ymd(20210101) - model_end_date
+days_to_project <- ymd(20201215) - model_end_date
 
 bc_data_Nov7 <- bc_data_daily_cases %>% 
   filter(between(reported_date, model_start_date, model_end_date)) %>% 
@@ -284,7 +297,7 @@ seir_projection_3 <- project_seir(
 
 seir_tidy_3 <- tidy_seir(seir_projection_3, resample_y_rep = 20) %>% 
   left_join(bc_data_Nov7, by = "day") %>% 
-  mutate(reported_date = seq(model_start_date, ymd(20210101), by = "1 days"))
+  mutate(reported_date = seq(model_start_date, ymd(20201215), by = "1 days"))
 
 plot_projection(
   seir_tidy_3,
@@ -292,8 +305,86 @@ plot_projection(
   value_column = "daily_cases",
   date_column = "reported_date"
 )
+# ggsave("model_projection_intervention_Nov7.png", dpi = 250, height = 6, width = 9)
 ```
 
+<br>
+
+### Restrictions on the 19th, but not the 7th
+```{r project_cases_3}
+model_start_date <- ymd(20201001)
+model_end_date   <- ymd(20201120)
+
+days_to_project <- ymd(20201215) - model_end_date
+
+bc_data_Nov19 <- bc_data_daily_cases %>% 
+  filter(between(reported_date, model_start_date, model_end_date)) %>% 
+  mutate(
+    day = 1:nrow(.),
+    f_seg = case_when(
+      reported_date == model_start_date ~ 0,
+      reported_date <= ymd(20201118) ~ 1,
+      TRUE ~ 2
+    )
+  )
+
+seir_model_4 <- fit_seir(
+  daily_cases     = bc_data_Nov19$daily_cases,
+  forecast_days   = 0,
+  samp_frac_fixed = rep(0.45, nrow(bc_data_Nov19)),
+  samp_frac_type  = "fixed",
+  f_seg           = bc_data_Nov19$f_seg,
+  i0_prior        = c(log(i0_value), 1), 
+  e_prior         = c(0.5, 0.05),
+  use_ramp        = FALSE,
+  rw_sigma        = 0.2,
+  f_prior         = cbind(c(0.4, 0.5), c(0.2, 0.2)),
+  R0_prior        = c(log(2.6), 0.2),
+  N_pop           = 5.15e6,
+  iter            = 500,
+  fit_type        = "optimizing"
+)
+
+seir_projection_4 <- project_seir(
+  seir_model_4,
+  iter = 1:50,
+  forecast_days = days_to_project
+)
+
+seir_tidy_4 <- tidy_seir(seir_projection_4, resample_y_rep = 20) %>% 
+  left_join(bc_data_Nov19, by = "day") %>% 
+  mutate(reported_date = seq(model_start_date, ymd(20201215), by = "1 days"))
+
+plot_projection(
+  seir_tidy_4,
+  obs_dat = bc_data_Nov19,
+  value_column = "daily_cases",
+  date_column = "reported_date"
+) +
+  theme_bw(base_size = 18) +
+  labs(x = "Date") +
+  theme(plot.margin = unit(c(0.5, 0.9, 0.4, 0.4), "cm"))
+# ggsave("model_projection_intervention_Nov19.png", dpi = 250, height = 6, width = 9)
+```
+
+
+<br>
+
+## Get case numbers at key dates
+```{r retrieve_case_nums}
+list(
+  "No interventions"       = seir_tidy_2, 
+  "Nov. 7th intervention"  = seir_tidy_3,
+  "Nov. 19th intervention" = seir_tidy_4
+) %>% 
+  map(~filter(.x, reported_date %in% c(ymd(20201125), ymd(20201201), ymd(20201215)))) %>% 
+  bind_rows(., .id = "Model") %>% 
+  ungroup() %>% 
+  select(Model, reported_date, mu_0.5) %>% 
+  mutate(mu_0.5 = round(mu_0.5)) %>% 
+  pivot_wider(., names_from = reported_date, values_from = mu_0.5) %>% 
+  knitr::kable()
+```
 
 <br>
 

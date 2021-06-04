@@ -246,10 +246,9 @@ plot_projection(
   date_column = "reported_date"
 ) +
   theme_bw(base_size = 18) +
-  labs(x = "Date") +
+  labs(x = "Date", title = "No implementation of either intervention") +
   theme(plot.margin = unit(c(0.5, 0.9, 0.4, 0.4), "cm"))
 # ggsave("model_projection_no_interventions.png", dpi = 250, height = 6, width = 9)
-
 ```
 
 <br>
@@ -304,7 +303,10 @@ plot_projection(
   obs_dat = bc_data_Nov7,
   value_column = "daily_cases",
   date_column = "reported_date"
-)
+) +
+  theme_bw(base_size = 18) +
+  labs(x = "Date", title = "Implementation of Nov. 7th restrictions only") +
+  theme(plot.margin = unit(c(0.5, 0.9, 0.4, 0.4), "cm"))
 # ggsave("model_projection_intervention_Nov7.png", dpi = 250, height = 6, width = 9)
 ```
 
@@ -362,12 +364,71 @@ plot_projection(
   date_column = "reported_date"
 ) +
   theme_bw(base_size = 18) +
-  labs(x = "Date") +
+  labs(x = "Date", title = "Implementation of Nov. 19th restrictions only") +
   theme(plot.margin = unit(c(0.5, 0.9, 0.4, 0.4), "cm"))
 # ggsave("model_projection_intervention_Nov19.png", dpi = 250, height = 6, width = 9)
 ```
 
+<br>
 
+### Both interventions 1 week earlier
+```{r project_cases_4}
+model_start_date <- ymd(20201001)
+model_end_date   <- ymd(20201120)
+
+days_to_project <- ymd(20201215) - model_end_date
+
+bc_data_1weekEarly <- bc_data_daily_cases %>% 
+  filter(between(reported_date, model_start_date, model_end_date)) %>% 
+  mutate(
+    day = 1:nrow(.),
+    f_seg = case_when(
+      reported_date == ymd(20201001) ~ 0,
+      reported_date <= ymd(20201030) ~ 1,
+      reported_date <= ymd(20201111) ~ 2,
+      TRUE ~ 3
+    )
+  )
+
+seir_model_5 <- fit_seir(
+  daily_cases     = bc_data_1weekEarly$daily_cases,
+  forecast_days   = 0,
+  samp_frac_fixed = rep(0.45, nrow(bc_data_1weekEarly)),
+  samp_frac_type  = "fixed",
+  f_seg           = bc_data_1weekEarly$f_seg,
+  i0_prior        = c(log(i0_value), 1), 
+  e_prior         = c(0.5, 0.05),
+  use_ramp        = FALSE,
+  rw_sigma        = 0.2,
+  f_prior         = cbind(c(0.4, 0.5, 0.6), c(0.2, 0.2, 0.2)),
+  R0_prior        = c(log(2.6), 0.2),
+  N_pop           = 5.15e6,
+  iter            = 500,
+  fit_type        = "optimizing"
+)
+
+seir_projection_5 <- project_seir(
+  seir_model_5,
+  iter = 1:50,
+  forecast_days = days_to_project
+)
+
+seir_tidy_5 <- tidy_seir(seir_projection_5, resample_y_rep = 20) %>% 
+  left_join(bc_data_1weekEarly, by = "day") %>% 
+  mutate(reported_date = seq(model_start_date, ymd(20201215), by = "1 days"))
+
+plot_projection(
+  seir_tidy_5,
+  obs_dat = bc_data_1weekEarly,
+  value_column = "daily_cases",
+  date_column = "reported_date"
+) +
+  theme_bw(base_size = 18) +
+  labs(x = "Date", title = "Both Interventions One Week Earlier") +
+  theme(plot.margin = unit(c(0.5, 0.9, 0.4, 0.4), "cm"))
+# ggsave("model_projection_bothInterventions1WeekEarly.png", dpi = 250, height = 6, width = 9)
+```
+  
 <br>
 
 ## Get case numbers at key dates
@@ -375,7 +436,8 @@ plot_projection(
 list(
   "No interventions"       = seir_tidy_2, 
   "Nov. 7th intervention"  = seir_tidy_3,
-  "Nov. 19th intervention" = seir_tidy_4
+  "Nov. 19th intervention" = seir_tidy_4,
+  "Both interventions 1 week early" = seir_tidy_5
 ) %>% 
   map(~filter(.x, reported_date %in% c(ymd(20201125), ymd(20201201), ymd(20201215)))) %>% 
   bind_rows(., .id = "Model") %>% 

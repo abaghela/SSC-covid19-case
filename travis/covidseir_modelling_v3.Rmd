@@ -494,13 +494,14 @@ plot_projection(
 ## Get case numbers at key dates
 ```{r retrieve_case_nums}
 list(
+  "Fit Model"              = seir_tidy_1,
   "No interventions"       = seir_tidy_2, 
   "Nov. 7th intervention"  = seir_tidy_3,
   "Nov. 19th intervention" = seir_tidy_4,
   "Both interventions 1 week early"  = seir_tidy_5,
   "Both interventions 2 weeks early" = seir_tidy_6
 ) %>% 
-  map(~filter(.x, reported_date %in% c(ymd(20201125), ymd(20201201), ymd(20201215)))) %>% 
+  map(~filter(.x, reported_date %in% c(ymd(20201201), ymd(20201215)))) %>% 
   bind_rows(., .id = "Model") %>% 
   ungroup() %>% 
   select(Model, reported_date, mu_0.05, mu_0.5, mu_0.95) %>% 

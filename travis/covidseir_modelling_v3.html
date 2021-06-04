@@ -740,67 +740,61 @@ pre code {
 <div id="get-case-numbers-at-key-dates" class="section level2">
 <h2>Get case numbers at key dates</h2>
 <div class="sourceCode" id="cb31"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb31-1"><a href="#cb31-1" aria-hidden="true" tabindex="-1"></a><span class="fu">list</span>(</span>
-<span id="cb31-2"><a href="#cb31-2" aria-hidden="true" tabindex="-1"></a>  <span class="st">&quot;No interventions&quot;</span>       <span class="ot">=</span> seir_tidy_2, </span>
-<span id="cb31-3"><a href="#cb31-3" aria-hidden="true" tabindex="-1"></a>  <span class="st">&quot;Nov. 7th intervention&quot;</span>  <span class="ot">=</span> seir_tidy_3,</span>
-<span id="cb31-4"><a href="#cb31-4" aria-hidden="true" tabindex="-1"></a>  <span class="st">&quot;Nov. 19th intervention&quot;</span> <span class="ot">=</span> seir_tidy_4,</span>
-<span id="cb31-5"><a href="#cb31-5" aria-hidden="true" tabindex="-1"></a>  <span class="st">&quot;Both interventions 1 week early&quot;</span>  <span class="ot">=</span> seir_tidy_5,</span>
-<span id="cb31-6"><a href="#cb31-6" aria-hidden="true" tabindex="-1"></a>  <span class="st">&quot;Both interventions 2 weeks early&quot;</span> <span class="ot">=</span> seir_tidy_6</span>
-<span id="cb31-7"><a href="#cb31-7" aria-hidden="true" tabindex="-1"></a>) <span class="sc">%&gt;%</span> </span>
-<span id="cb31-8"><a href="#cb31-8" aria-hidden="true" tabindex="-1"></a>  <span class="fu">map</span>(<span class="sc">~</span><span class="fu">filter</span>(.x, reported_date <span class="sc">%in%</span> <span class="fu">c</span>(<span class="fu">ymd</span>(<span class="dv">20201125</span>), <span class="fu">ymd</span>(<span class="dv">20201201</span>), <span class="fu">ymd</span>(<span class="dv">20201215</span>)))) <span class="sc">%&gt;%</span> </span>
-<span id="cb31-9"><a href="#cb31-9" aria-hidden="true" tabindex="-1"></a>  <span class="fu">bind_rows</span>(., <span class="at">.id =</span> <span class="st">&quot;Model&quot;</span>) <span class="sc">%&gt;%</span> </span>
-<span id="cb31-10"><a href="#cb31-10" aria-hidden="true" tabindex="-1"></a>  <span class="fu">ungroup</span>() <span class="sc">%&gt;%</span> </span>
-<span id="cb31-11"><a href="#cb31-11" aria-hidden="true" tabindex="-1"></a>  <span class="fu">select</span>(Model, reported_date, mu_0<span class="fl">.05</span>, mu_0<span class="fl">.5</span>, mu_0<span class="fl">.95</span>) <span class="sc">%&gt;%</span> </span>
-<span id="cb31-12"><a href="#cb31-12" aria-hidden="true" tabindex="-1"></a>  <span class="fu">mutate</span>(</span>
-<span id="cb31-13"><a href="#cb31-13" aria-hidden="true" tabindex="-1"></a>    <span class="at">all_values =</span> <span class="fu">paste0</span>(</span>
-<span id="cb31-14"><a href="#cb31-14" aria-hidden="true" tabindex="-1"></a>      <span class="fu">round</span>(mu_0<span class="fl">.5</span>), <span class="st">&quot; (&quot;</span>, <span class="fu">round</span>(mu_0<span class="fl">.05</span>), <span class="st">&quot;/&quot;</span>, <span class="fu">round</span>(mu_0<span class="fl">.95</span>), <span class="st">&quot;)&quot;</span></span>
-<span id="cb31-15"><a href="#cb31-15" aria-hidden="true" tabindex="-1"></a>    )</span>
-<span id="cb31-16"><a href="#cb31-16" aria-hidden="true" tabindex="-1"></a>  ) <span class="sc">%&gt;%</span> </span>
-<span id="cb31-17"><a href="#cb31-17" aria-hidden="true" tabindex="-1"></a>  <span class="fu">select</span>(<span class="sc">-</span><span class="fu">starts_with</span>(<span class="st">&quot;mu&quot;</span>)) <span class="sc">%&gt;%</span> </span>
-<span id="cb31-18"><a href="#cb31-18" aria-hidden="true" tabindex="-1"></a>  <span class="fu">pivot_wider</span>(., <span class="at">names_from =</span> reported_date, <span class="at">values_from =</span> all_values) <span class="sc">%&gt;%</span> </span>
-<span id="cb31-19"><a href="#cb31-19" aria-hidden="true" tabindex="-1"></a>  knitr<span class="sc">::</span><span class="fu">kable</span>()</span></code></pre></div>
+<span id="cb31-2"><a href="#cb31-2" aria-hidden="true" tabindex="-1"></a>  <span class="st">&quot;Fit Model&quot;</span>              <span class="ot">=</span> seir_tidy_1,</span>
+<span id="cb31-3"><a href="#cb31-3" aria-hidden="true" tabindex="-1"></a>  <span class="st">&quot;No interventions&quot;</span>       <span class="ot">=</span> seir_tidy_2, </span>
+<span id="cb31-4"><a href="#cb31-4" aria-hidden="true" tabindex="-1"></a>  <span class="st">&quot;Nov. 7th intervention&quot;</span>  <span class="ot">=</span> seir_tidy_3,</span>
+<span id="cb31-5"><a href="#cb31-5" aria-hidden="true" tabindex="-1"></a>  <span class="st">&quot;Nov. 19th intervention&quot;</span> <span class="ot">=</span> seir_tidy_4,</span>
+<span id="cb31-6"><a href="#cb31-6" aria-hidden="true" tabindex="-1"></a>  <span class="st">&quot;Both interventions 1 week early&quot;</span>  <span class="ot">=</span> seir_tidy_5,</span>
+<span id="cb31-7"><a href="#cb31-7" aria-hidden="true" tabindex="-1"></a>  <span class="st">&quot;Both interventions 2 weeks early&quot;</span> <span class="ot">=</span> seir_tidy_6</span>
+<span id="cb31-8"><a href="#cb31-8" aria-hidden="true" tabindex="-1"></a>) <span class="sc">%&gt;%</span> </span>
+<span id="cb31-9"><a href="#cb31-9" aria-hidden="true" tabindex="-1"></a>  <span class="fu">map</span>(<span class="sc">~</span><span class="fu">filter</span>(.x, reported_date <span class="sc">%in%</span> <span class="fu">c</span>(<span class="fu">ymd</span>(<span class="dv">20201201</span>), <span class="fu">ymd</span>(<span class="dv">20201215</span>)))) <span class="sc">%&gt;%</span> </span>
+<span id="cb31-10"><a href="#cb31-10" aria-hidden="true" tabindex="-1"></a>  <span class="fu">bind_rows</span>(., <span class="at">.id =</span> <span class="st">&quot;Model&quot;</span>) <span class="sc">%&gt;%</span> </span>
+<span id="cb31-11"><a href="#cb31-11" aria-hidden="true" tabindex="-1"></a>  <span class="fu">ungroup</span>() <span class="sc">%&gt;%</span> </span>
+<span id="cb31-12"><a href="#cb31-12" aria-hidden="true" tabindex="-1"></a>  <span class="fu">select</span>(Model, reported_date, mu_0<span class="fl">.05</span>, mu_0<span class="fl">.5</span>, mu_0<span class="fl">.95</span>) <span class="sc">%&gt;%</span> </span>
+<span id="cb31-13"><a href="#cb31-13" aria-hidden="true" tabindex="-1"></a>  <span class="fu">mutate</span>(</span>
+<span id="cb31-14"><a href="#cb31-14" aria-hidden="true" tabindex="-1"></a>    <span class="at">all_values =</span> <span class="fu">paste0</span>(</span>
+<span id="cb31-15"><a href="#cb31-15" aria-hidden="true" tabindex="-1"></a>      <span class="fu">round</span>(mu_0<span class="fl">.5</span>), <span class="st">&quot; (&quot;</span>, <span class="fu">round</span>(mu_0<span class="fl">.05</span>), <span class="st">&quot;/&quot;</span>, <span class="fu">round</span>(mu_0<span class="fl">.95</span>), <span class="st">&quot;)&quot;</span></span>
+<span id="cb31-16"><a href="#cb31-16" aria-hidden="true" tabindex="-1"></a>    )</span>
+<span id="cb31-17"><a href="#cb31-17" aria-hidden="true" tabindex="-1"></a>  ) <span class="sc">%&gt;%</span> </span>
+<span id="cb31-18"><a href="#cb31-18" aria-hidden="true" tabindex="-1"></a>  <span class="fu">select</span>(<span class="sc">-</span><span class="fu">starts_with</span>(<span class="st">&quot;mu&quot;</span>)) <span class="sc">%&gt;%</span> </span>
+<span id="cb31-19"><a href="#cb31-19" aria-hidden="true" tabindex="-1"></a>  <span class="fu">pivot_wider</span>(., <span class="at">names_from =</span> reported_date, <span class="at">values_from =</span> all_values) <span class="sc">%&gt;%</span> </span>
+<span id="cb31-20"><a href="#cb31-20" aria-hidden="true" tabindex="-1"></a>  knitr<span class="sc">::</span><span class="fu">kable</span>()</span></code></pre></div>
 <table>
-<colgroup>
-<col width="40%" />
-<col width="18%" />
-<col width="19%" />
-<col width="20%" />
-</colgroup>
 <thead>
 <tr class="header">
 <th align="left">Model</th>
-<th align="left">2020-11-25</th>
 <th align="left">2020-12-01</th>
 <th align="left">2020-12-15</th>
 </tr>
 </thead>
 <tbody>
 <tr class="odd">
+<td align="left">Fit Model</td>
+<td align="left">696 (626/764)</td>
+<td align="left">599 (534/635)</td>
+</tr>
+<tr class="even">
 <td align="left">No interventions</td>
-<td align="left">957 (783/1088)</td>
 <td align="left">1189 (922/1383)</td>
 <td align="left">1932 (1337/2385)</td>
 </tr>
-<tr class="even">
+<tr class="odd">
 <td align="left">Nov. 7th intervention</td>
-<td align="left">740 (556/981)</td>
 <td align="left">765 (482/1165)</td>
 <td align="left">836 (327/1837)</td>
 </tr>
-<tr class="odd">
+<tr class="even">
 <td align="left">Nov. 19th intervention</td>
-<td align="left">923 (793/1047)</td>
 <td align="left">985 (749/1271)</td>
 <td align="left">756 (380/1718)</td>
 </tr>
-<tr class="even">
+<tr class="odd">
 <td align="left">Both interventions 1 week early</td>
-<td align="left">755 (606/938)</td>
 <td align="left">771 (454/1137)</td>
 <td align="left">749 (189/1768)</td>
 </tr>
-<tr class="odd">
+<tr class="even">
 <td align="left">Both interventions 2 weeks early</td>
-<td align="left">727 (512/976)</td>
 <td align="left">841 (474/1219)</td>
 <td align="left">1021 (333/2020)</td>
 </tr>

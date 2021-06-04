@@ -442,9 +442,14 @@ list(
   map(~filter(.x, reported_date %in% c(ymd(20201125), ymd(20201201), ymd(20201215)))) %>% 
   bind_rows(., .id = "Model") %>% 
   ungroup() %>% 
-  select(Model, reported_date, mu_0.5) %>% 
-  mutate(mu_0.5 = round(mu_0.5)) %>% 
-  pivot_wider(., names_from = reported_date, values_from = mu_0.5) %>% 
+  select(Model, reported_date, mu_0.05, mu_0.5, mu_0.95) %>% 
+  mutate(
+    all_values = paste0(
+      round(mu_0.5), " (", round(mu_0.05), "/", round(mu_0.95), ")"
+    )
+  ) %>% 
+  select(-starts_with("mu")) %>% 
+  pivot_wider(., names_from = reported_date, values_from = all_values) %>% 
   knitr::kable()
 ```
 

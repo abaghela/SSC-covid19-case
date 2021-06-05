@@ -54,37 +54,7 @@ bc_data_daily_cases <- bc_data %>%
 
 <br>
 
-## Plot trends in case data
-### Daily cases, January 29 2020 - May 17 2021
-```{r daily_cases_all}
-ggplot(bc_data_daily_cases, aes(reported_date, daily_cases)) +
-  geom_col() +
-  scale_y_continuous(expand = c(0, 0)) +
-  labs(
-    x = "Date",
-    y = "Daily Case Count"
-  )
-```
-
-<br>
-
-### Daily cases, January 29 - December 31 2020
-```{r daily_cases_fall}
-bc_data_daily_cases %>%
-  filter(reported_date <= ymd("20201231")) %>%
-  ggplot(., aes(reported_date, daily_cases)) +
-  geom_point(pch = 21, fill = "dodgerblue", colour = "black") +
-  geom_line() +
-  scale_y_continuous(expand = c(0, 20)) +
-  labs(
-    x = "Date",
-    y = "Daily Case Count"
-  )
-```
-
-<br>
-
-### Daily cases, September 1 - December 31 2020, with highlighted dates
+## Daily cases, October 1st - December 15th 2020, with highlighted dates
 ```{r plot_restrictions_labelled}
 major_restrictions <- c(
   "2020-11-07" = " Nov. 7th:\nNo private gatherings.",
@@ -98,7 +68,7 @@ major_restrictions_tbl <- tibble(
 )
 
 bc_data_daily_cases %>%
-  filter(between(reported_date, ymd("20200901"), ymd("20201231"))) %>%
+  filter(between(reported_date, ymd(20201001), ymd(20201215))) %>%
   ggplot(., aes(reported_date, daily_cases)) +
   geom_point(pch = 21, fill = "dodgerblue", colour = "black", size = 2) +
   geom_line() +
@@ -125,7 +95,7 @@ bc_data_daily_cases %>%
     hjust = -0.05
   ) +
   theme_bw(base_size = 20)
-ggsave("case_plot.png", dpi = 250, height = 6, width = 9)
+# ggsave("case_plot.png", dpi = 250, height = 6, width = 9)
 ```
 
 <br>
@@ -133,7 +103,7 @@ ggsave("case_plot.png", dpi = 250, height = 6, width = 9)
 ## Fitting a model to the data
 ```{r model_seir}
 bc_data_fall <- bc_data_daily_cases %>% 
-  filter(between(reported_date, ymd(20201001), ymd(20210101))) %>% 
+  filter(between(reported_date, ymd(20201001), ymd(20201215))) %>% 
   mutate(
     day = 1:nrow(.),
     f_seg = case_when(
@@ -178,18 +148,9 @@ plot_projection(
   date_column = "reported_date"
 ) +
   theme_bw(base_size = 18) +
-  labs(x = "Date") +
-  theme(plot.margin = unit(c(0.5, 0.8, 0.4, 0.4), "cm"))
+  labs(x = "Date", title = "Initial SEIR model fit to whole data range") +
+  theme(plot.margin = unit(c(0.5, 0.9, 0.4, 0.4), "cm"))
 # ggsave("model_fit_to_data.png", dpi = 250, height = 6, width = 9)
-
-
-plot_residuals(
-  pred_dat = seir_tidy_1,
-  obj = seir_model_1,
-  obs_dat = bc_data_fall,
-  value_column = "daily_cases",
-  date_column = "reported_date",
-)
 ```
 
 <br>
@@ -371,70 +332,10 @@ plot_projection(
 
 <br>
 
-### Both interventions 1 week earlier
-```{r project_cases_4}
-model_start_date <- ymd(20201001)
-model_end_date   <- ymd(20201120)
-
-days_to_project <- ymd(20201215) - model_end_date
-
-bc_data_1weekEarly <- bc_data_daily_cases %>% 
-  filter(between(reported_date, model_start_date, model_end_date)) %>% 
-  mutate(
-    day = 1:nrow(.),
-    f_seg = case_when(
-      reported_date == ymd(20201001) ~ 0,
-      reported_date <= ymd(20201030) ~ 1,
-      reported_date <= ymd(20201111) ~ 2,
-      TRUE ~ 3
-    )
-  )
-
-seir_model_5 <- fit_seir(
-  daily_cases     = bc_data_1weekEarly$daily_cases,
-  forecast_days   = 0,
-  samp_frac_fixed = rep(0.45, nrow(bc_data_1weekEarly)),
-  samp_frac_type  = "fixed",
-  f_seg           = bc_data_1weekEarly$f_seg,
-  i0_prior        = c(log(i0_value), 1), 
-  e_prior         = c(0.5, 0.05),
-  use_ramp        = FALSE,
-  rw_sigma        = 0.2,
-  f_prior         = cbind(c(0.4, 0.5, 0.6), c(0.2, 0.2, 0.2)),
-  R0_prior        = c(log(2.6), 0.2),
-  N_pop           = 5.15e6,
-  iter            = 500,
-  fit_type        = "optimizing"
-)
-
-seir_projection_5 <- project_seir(
-  seir_model_5,
-  iter = 1:50,
-  forecast_days = days_to_project
-)
-
-seir_tidy_5 <- tidy_seir(seir_projection_5, resample_y_rep = 20) %>% 
-  left_join(bc_data_1weekEarly, by = "day") %>% 
-  mutate(reported_date = seq(model_start_date, ymd(20201215), by = "1 days"))
-
-plot_projection(
-  seir_tidy_5,
-  obs_dat = bc_data_1weekEarly,
-  value_column = "daily_cases",
-  date_column = "reported_date"
-) +
-  theme_bw(base_size = 18) +
-  labs(x = "Date", title = "Scenario 4: Both Interventions One Week Earlier") +
-  theme(plot.margin = unit(c(0.5, 0.9, 0.4, 0.4), "cm"))
-# ggsave("model_projection_bothInterventions1WeekEarly.png", dpi = 250, height = 6, width = 9)
-```
-
-<br>
-
 ### Both interventions 2 weeks earlier
 ```{r project_cases_5}
 model_start_date <- ymd(20201001)
-model_end_date   <- ymd(20201120)
+model_end_date   <- ymd(20201106)
 
 days_to_project <- ymd(20201215) - model_end_date
 
@@ -484,9 +385,9 @@ plot_projection(
   date_column = "reported_date"
 ) +
   theme_bw(base_size = 18) +
-  labs(x = "Date", title = "Scenario 5: Both Interventions Two Weeks Earlier") +
+  labs(x = "Date", title = "Scenario 4: Both Interventions Two Weeks Earlier") +
   theme(plot.margin = unit(c(0.5, 0.9, 0.4, 0.4), "cm"))
-# ggsave("model_projection_bothInterventions2WeeksEarly.png", dpi = 250, height = 6, width = 9)
+ggsave("model_projection_bothInterventions2WeeksEarly.png", dpi = 250, height = 6, width = 9)
 ```
 
 <br>
@@ -498,7 +399,6 @@ list(
   "No interventions"       = seir_tidy_2, 
   "Nov. 7th intervention"  = seir_tidy_3,
   "Nov. 19th intervention" = seir_tidy_4,
-  "Both interventions 1 week early"  = seir_tidy_5,
   "Both interventions 2 weeks early" = seir_tidy_6
 ) %>% 
   map(~filter(.x, reported_date %in% c(ymd(20201201), ymd(20201215)))) %>% 

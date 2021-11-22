@@ -60,5 +60,6 @@ transmission and infection, impact mortality in British Columbia?
 - Submitted poster must be a PDF
 - Max size is 3.5 feet wide, 4 feet tall
 
+![Alt text](/SSC_COVID19_Case_Poster_AB_TB_HM_DM.png?raw=true "Poster")
 
 
